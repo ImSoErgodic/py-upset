@@ -1,12 +1,30 @@
 __author__ = 'leo@opensignal.com'
 
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib import gridspec
-from itertools import chain, combinations
+
+def plot(sets, set_names, sort_by='size', inters_size_bounds=(0, np.inf), inters_degree_bounds=(1, np.inf)):
+    """
+    Wrapper function that initialises an UpSet class and calls its plot() method with the passed parameters.
+
+    :param sets: set object containing the data to intersect.
+    :param set_names: list-like. Must contain non-empty strings.
+    :param sort_by: str. 'size | degree'.
+    :param inters_size_bounds: tuple. The minimum and maximum (inclusive) size allowed for an intersection to be
+    plotted.
+    :param inters_degree_bounds: tuple. The minimum and maximum (inclusive) degree allowed for an intersection to
+    be plotted.
+    :return: figure and axes containing the plots.
+    """
+    return UpSet(sets, set_names).plot(sort_by, inters_size_bounds=inters_size_bounds,
+                                inters_degree_bounds=inters_degree_bounds)
 
 
 class UpSet():
+
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib import gridspec
+    from itertools import chain, combinations
+
     def __init__(self, sets, set_names):
         """
         Class linked to a data set; it contains the methods to produce plots according to the UpSet representation.
@@ -18,7 +36,6 @@ class UpSet():
         self.set_names = set_names
         self.set_dict = dict(zip(set_names, sets))
         self.inters_degree_bounds, self.inters_size_bounds = None, None
-
 
     def _base_sets_plot(self, ax, sorted_sets, sorted_set_names):
         ax.invert_xaxis()
@@ -151,7 +168,7 @@ class UpSet():
             for s in ax.spines.values():
                 s.set_visible(False)
 
-    def compute_intersections(self, inters_size_bounds=(0, np.inf), inters_degree_bounds=(0, np.inf)):
+    def _compute_intersections(self, inters_size_bounds=(0, np.inf), inters_degree_bounds=(0, np.inf)):
         """
         Computes the intersections of the sets passed to the class discarding those beyond the size or degree bounds.
 
@@ -228,7 +245,7 @@ class UpSet():
         """
 
         if (self.inters_size_bounds != inters_size_bounds) and (self.inters_degree_bounds != inters_degree_bounds):
-            self.compute_intersections(inters_size_bounds, inters_degree_bounds)
+            self._compute_intersections(inters_size_bounds, inters_degree_bounds)
 
         if sort_by == 'size':
             order = np.argsort(self.inters_sizes)[::-1]
