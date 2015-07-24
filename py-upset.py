@@ -7,11 +7,17 @@ from itertools import chain, combinations
 
 
 class UpSet():
-    def __init__(self, sets, set_names, scaling=1.0):
-        self.scaling = scaling
+    def __init__(self, sets, set_names):
+        """
+        Class linked to a data set; it contains the methods to produce plots according to the UpSet representation.
+
+        :param sets: set objects containing the data to intersect.
+        :param set_names: list-like. Must contain non-empty strings.
+        """
         self.sets = sets
         self.set_names = set_names
         self.set_dict = dict(zip(set_names, sets))
+        self.inters_degree_bounds, self.inters_size_bounds = None, None
 
 
     def _base_sets_plot(self, ax, sorted_sets, sorted_set_names):
@@ -145,8 +151,16 @@ class UpSet():
             for s in ax.spines.values():
                 s.set_visible(False)
 
-    def _prepare_intersections(self, inters_order, inters_size_bounds, inters_degree_bounds):
+    def compute_intersections(self, inters_size_bounds=(0, np.inf), inters_degree_bounds=(0, np.inf)):
+        """
+        Computes the intersections of the sets passed to the class discarding those beyond the size or degree bounds.
 
+        :param inters_size_bounds: tuple. The minimum and maximum (inclusive) size allowed for an intersection to be
+        plotted.
+        :param inters_degree_bounds: tuple. The minimum and maximum (inclusive) degree allowed for an intersection to
+        be plotted.
+        :returns self.
+        """
         in_sets_list = []
         out_sets_list = []
         inters_sizes = []
@@ -172,43 +186,62 @@ class UpSet():
         size_clip = (inters_sizes <= inters_size_bounds[1]) & (inters_sizes >= inters_size_bounds[0]) & (
             inters_degrees >= inters_degree_bounds[0]) & (inters_degrees <= inters_degree_bounds[1])
 
-        in_sets_list = np.array(in_sets_list)[size_clip]
-        out_sets_list = np.array(out_sets_list)[size_clip]
-        inters_sizes = inters_sizes[size_clip]
-        inters_degrees = inters_degrees[size_clip]
+        self.in_sets_list = np.array(in_sets_list)[size_clip]
+        self.out_sets_list = np.array(out_sets_list)[size_clip]
+        self.inters_sizes = inters_sizes[size_clip]
+        self.inters_degrees = inters_degrees[size_clip]
+        self.inters_size_bounds, self.inters_degree_bounds = inters_size_bounds, inters_degree_bounds
 
-        if inters_order == 'size':
-            order = np.argsort(inters_sizes)[::-1]
-        elif inters_order == 'degree':
-            order = np.argsort(inters_degrees)
-
-        return in_sets_list[order], out_sets_list[order], inters_sizes[order]
+        return self
 
 
-    def plot(self, inters_order='size', inters_size_bounds=(0, np.inf), inters_degree_bounds=(1, np.inf)):
-
-        in_sets, out_sets, inters_sizes = self._prepare_intersections(inters_order, inters_size_bounds,
-                                                                      inters_degree_bounds)
-
+    def _create_coordinates(self):
         self.rows = len(self.sets)
-        self.cols = len(inters_sizes)
-        self.x_values = (np.arange(self.cols) + 1) * self.scaling
-        self.y_values = (np.arange(self.rows) + 1) * self.scaling
+        self.cols = len(self.inters_sizes)
+        self.x_values = (np.arange(self.cols) + 1)
+        self.y_values = (np.arange(self.rows) + 1)
 
+    def _prepare_figure(self):
         fig = plt.figure(figsize=(16, 10))
-
         setsize_w, setsize_h = 3, self.rows
         intmatrix_w, intmatrix_h = setsize_w + self.cols, self.rows
         intbars_w, intbars_h = setsize_w + self.cols, self.rows * 4
-
         fig_cols = self.cols + 3
         fig_rows = self.rows + self.rows * 4
         gs = gridspec.GridSpec(fig_rows, fig_cols)
         gs.update(wspace=.1, hspace=.2)
-
         ax_setsize = plt.subplot(gs[-1:-setsize_h, 0:setsize_w])
         ax_intmatrix = plt.subplot(gs[-1:-intmatrix_h, setsize_w:intmatrix_w])
         ax_intbars = plt.subplot(gs[:self.rows * 4 - 1, setsize_w:intbars_w])
+        return ax_intbars, ax_intmatrix, ax_setsize, fig
+
+    def plot(self, sort_by='size', inters_size_bounds=(0, np.inf), inters_degree_bounds=(1, np.inf)):
+        """
+        Plots intersections ignoring those with degree or size outside the boundaries passed as arguments.
+        Intersections can be sorted by size or degree.
+        :param sort_by: str. "size | degree".
+        :param inters_size_bounds: tuple. The minimum and maximum (inclusive) size allowed for an intersection to be
+        plotted.
+        :param inters_degree_bounds: tuple. The minimum and maximum (inclusive) degree allowed for an intersection to
+        be plotted.
+        :return: figure and list of axes produced.
+        """
+
+        if (self.inters_size_bounds != inters_size_bounds) and (self.inters_degree_bounds != inters_degree_bounds):
+            self.compute_intersections(inters_size_bounds, inters_degree_bounds)
+
+        if sort_by == 'size':
+            order = np.argsort(self.inters_sizes)[::-1]
+        elif sort_by == 'degree':
+            order = np.argsort(self.inters_degrees)
+
+        inters_sizes = self.inters_sizes[order]
+        in_sets = self.in_sets_list[order]
+        out_sets = self.out_sets_list[order]
+
+        self._create_coordinates()
+
+        ax_intbars, ax_intmatrix, ax_setsize, fig = self._prepare_figure()
 
         base_sets_order = np.argsort([len(x) for x in self.sets])[::-1]
         sorted_sets = self.sets[base_sets_order]
