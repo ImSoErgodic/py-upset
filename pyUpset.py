@@ -249,7 +249,7 @@ class __PlotData:
         """
 
         try:
-            if self.ordered_base_sets or self.ordered_base_set_names: pass
+            self.ordered_base_sets, self.ordered_base_set_names
         except AttributeError as e:
             print("Base sets must be extracted before it's possible to compute their intersections.")
             raise
