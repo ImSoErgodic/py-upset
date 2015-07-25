@@ -1,5 +1,10 @@
 __author__ = 'leo@opensignal.com'
 
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import gridspec
+from itertools import chain, combinations
+import pandas as pd
 
 def plot(sets, set_names, sort_by='size', inters_size_bounds=(0, np.inf), inters_degree_bounds=(1, np.inf)):
     """
@@ -20,21 +25,13 @@ def plot(sets, set_names, sort_by='size', inters_size_bounds=(0, np.inf), inters
 
 class UpSet():
 
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from matplotlib import gridspec
-    from itertools import chain, combinations
-
-    def __init__(self, sets, set_names):
+    def __init__(self, data_dict):
         """
         Class linked to a data set; it contains the methods to produce plots according to the UpSet representation.
 
-        :param sets: set objects containing the data to intersect.
-        :param set_names: list-like. Must contain non-empty strings.
+        :param data_dict: dict. {'name': pandas DataFrame}
         """
-        self.sets = sets
-        self.set_names = set_names
-        self.set_dict = dict(zip(set_names, sets))
+        self.data_dict = data_dict
         self.inters_degree_bounds, self.inters_size_bounds = None, None
 
     def _base_sets_plot(self, ax, sorted_sets, sorted_set_names):
@@ -168,10 +165,11 @@ class UpSet():
             for s in ax.spines.values():
                 s.set_visible(False)
 
-    def _compute_intersections(self, inters_size_bounds=(0, np.inf), inters_degree_bounds=(0, np.inf)):
+    def _compute_intersections(self, set_dict, inters_size_bounds=(0, np.inf), inters_degree_bounds=(0, np.inf)):
         """
         Computes the intersections of the sets passed to the class discarding those beyond the size or degree bounds.
 
+        :param set_dict: dict. {'name':'set'}
         :param inters_size_bounds: tuple. The minimum and maximum (inclusive) size allowed for an intersection to be
         plotted.
         :param inters_degree_bounds: tuple. The minimum and maximum (inclusive) degree allowed for an intersection to
@@ -183,19 +181,25 @@ class UpSet():
         inters_sizes = []
         inters_degrees = []
 
+        set_names = set_dict.keys()
+
         for col_num, in_sets in enumerate(chain.from_iterable(
-                combinations(self.set_names, i) for i in np.arange(1, len(self.sets) + 1))):
+                combinations(set_names, i) for i in np.arange(1, len(set_dict) + 1))):
+
+            inters_degrees.append(len(in_sets))
+
             in_sets_list.append(in_sets)
             in_sets = list(in_sets)
-            inters_degrees.append(len(in_sets))
-            out_sets = set(self.set_names).difference(in_sets)
+
+            out_sets = set(set_names).difference(in_sets)
             out_sets_list.append(tuple(out_sets))
-            final_set = set(self.set_dict[in_sets.pop()])
+
+            exclusive_intersection = set(set_dict[in_sets.pop()])
             for s in in_sets:
-                final_set.intersection_update(self.set_dict[s])
+                exclusive_intersection.intersection_update(set_dict[s])
             for s in out_sets:
-                final_set.difference_update(self.set_dict[s])
-            inters_sizes.append(len(final_set))
+                exclusive_intersection.difference_update(set_dict[s])
+            inters_sizes.append(len(exclusive_intersection))
 
         inters_sizes = np.array(inters_sizes)
         inters_degrees = np.array(inters_degrees)
@@ -207,14 +211,14 @@ class UpSet():
         self.out_sets_list = np.array(out_sets_list)[size_clip]
         self.inters_sizes = inters_sizes[size_clip]
         self.inters_degrees = inters_degrees[size_clip]
-        self.inters_size_bounds, self.inters_degree_bounds = inters_size_bounds, inters_degree_bounds
+#        self.inters_size_bounds, self.inters_degree_bounds = inters_size_bounds, inters_degree_bounds
 
         return self
 
 
-    def _create_coordinates(self):
-        self.rows = len(self.sets)
-        self.cols = len(self.inters_sizes)
+    def _create_coordinates(self, sets, inters_sizes):
+        self.rows = len(sets)
+        self.cols = len(inters_sizes)
         self.x_values = (np.arange(self.cols) + 1)
         self.y_values = (np.arange(self.rows) + 1)
 
@@ -232,10 +236,11 @@ class UpSet():
         ax_intbars = plt.subplot(gs[:self.rows * 4 - 1, setsize_w:intbars_w])
         return ax_intbars, ax_intmatrix, ax_setsize, fig
 
-    def plot(self, sort_by='size', inters_size_bounds=(0, np.inf), inters_degree_bounds=(1, np.inf)):
+    def plot(self, columns, sort_by='size', inters_size_bounds=(0, np.inf), inters_degree_bounds=(1, np.inf)):
         """
         Plots intersections ignoring those with degree or size outside the boundaries passed as arguments.
         Intersections can be sorted by size or degree.
+        :param columns: dict. {'name':'name of column to use in intersection'}
         :param sort_by: str. "size | degree".
         :param inters_size_bounds: tuple. The minimum and maximum (inclusive) size allowed for an intersection to be
         plotted.
@@ -244,29 +249,40 @@ class UpSet():
         :return: figure and list of axes produced.
         """
 
-        if (self.inters_size_bounds != inters_size_bounds) and (self.inters_degree_bounds != inters_degree_bounds):
-            self._compute_intersections(inters_size_bounds, inters_degree_bounds)
+        sets = []
+        set_names = []
+        for (dfname, setname) in columns.items():
+            sets.append(set(self.data_dict[dfname][setname].values))
+            set_names.append('%s[%s]' % (dfname, setname))
+        sets = np.array(sets)
+        set_names = np.array(set_names)
+
+        # if (self.inters_size_bounds != inters_size_bounds) and (self.inters_degree_bounds != inters_degree_bounds):
+        self._compute_intersections(dict(zip(set_names, sets)), inters_size_bounds, inters_degree_bounds)
 
         if sort_by == 'size':
             order = np.argsort(self.inters_sizes)[::-1]
         elif sort_by == 'degree':
             order = np.argsort(self.inters_degrees)
 
-        inters_sizes = self.inters_sizes[order]
-        in_sets = self.in_sets_list[order]
-        out_sets = self.out_sets_list[order]
+        ordered_inters_sizes = self.inters_sizes[order]
+        ordered_in_sets = self.in_sets_list[order]
+        ordered_out_sets = self.out_sets_list[order]
 
-        self._create_coordinates()
+        self._create_coordinates(sets, ordered_inters_sizes)
 
         ax_intbars, ax_intmatrix, ax_setsize, fig = self._prepare_figure()
 
-        base_sets_order = np.argsort([len(x) for x in self.sets])[::-1]
-        sorted_sets = self.sets[base_sets_order]
-        sorted_sets_names = self.set_names[base_sets_order]
+        base_sets_order = np.argsort([len(x) for x in sets])[::-1]
+        sorted_sets = sets[base_sets_order]
+        sorted_sets_names = set_names[base_sets_order]
         set_row_map = dict(zip(sorted_sets_names, self.y_values))
 
         ylim = self._base_sets_plot(ax_setsize, sorted_sets, sorted_sets_names)
-        xlim = self._inters_sizes_plot(ax_intbars, inters_sizes)
-        self._inters_matrix(ax_intmatrix, in_sets, out_sets, xlim, ylim, set_row_map)
+        xlim = self._inters_sizes_plot(ax_intbars, ordered_inters_sizes)
+        self._inters_matrix(ax_intmatrix, ordered_in_sets, ordered_out_sets, xlim, ylim, set_row_map)
 
         return fig, [ax_intbars, ax_intmatrix, ax_intbars]
+
+    def _scatter(self, ax, xvar, yvar):
+        pass
