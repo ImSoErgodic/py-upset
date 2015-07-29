@@ -6,7 +6,9 @@ A pure-python implementation of the UpSet suite of visualisation methods by Lex,
 The purpose of this package is to reproduce (statically) some of the visualisations that can be obtained through the UpSet tool of Lex, Gehlenborg et al. (See http://vcg.github.io/upset/about/#)
 
 In particular, __pyUpSet's focus is on intersections__, which motivates many of the design choices behind the exposed 
-interface and the internal mechanics of the module.
+interface and the internal mechanics of the module. (More on this below.)
+
+Consistently with the documentation used for Lex et al.'s UpSet, the data employed in the following examples comes from the movie data set of the [GroupLens Labs](http://grouplens.org/datasets/movielens).
 
 ## How it works
 
