@@ -68,7 +68,7 @@ def plot(data_dict, *, unique_keys=None, sort_by='size', inters_size_bounds=(0, 
         data_values = plot_data.extract_data_for[plot_kind](**pl['data'])
         graph_kwargs = pl['graph_kwargs'] if pl.__contains__('graph_kwargs') else {}
         pm = upset._plot_method[plot_kind]
-        ax = pm(i, data_values, graph_kwargs, labels = pl['data'])
+        ax = pm(i, data_values, graph_kwargs, labels=pl['data'])
         fig_dict['additional'].append(ax)
 
     return fig_dict
@@ -95,9 +95,15 @@ def __get_all_common_columns(data_dict):
 class UpSetPlot():
     def __init__(self, rows, cols, additional_plots, query):
         """
-        Class linked to a data set; it contains the methods to produce plots according to the UpSet representation.
-        :type plot_data: DataExtractor
-        :param plot_data: PlotData object
+        Generates figures and axes.
+
+        :param rows: The number of rows of the intersection matrix
+
+        :param cols: The number of columns of the intersection matrix
+
+        :param additional_plots: list of dictionaries as specified in plot()
+
+        :param query: list of tuples as specified in plot()
         """
 
         # set standard colors
@@ -127,11 +133,24 @@ class UpSetPlot():
         # [col, 1])) for col in qu_col]))
 
     def _create_coordinates(self, rows, cols):
+        """
+        Creates the x, y coordinates shared by the main plots.
+
+        :param rows: number of rows of intersection matrix
+        :param cols: number of columns of intersection matrix
+        :return: arrays with x and y coordinates
+        """
         x_values = (np.arange(cols) + 1)
         y_values = (np.arange(rows) + 1)
         return x_values, y_values
 
     def _prepare_figure(self, additional_plots):
+        """
+        Prepares the figure, axes (and their grid) taking into account the additional plots.
+
+        :param additional_plots: list of dictionaries as specified in plot()
+        :return: references to the newly created figure and axes
+        """
         fig = plt.figure(figsize=(16, 10))
         if additional_plots:
             main_gs = gridspec.GridSpec(3, 1, hspace=.6)
@@ -165,14 +184,45 @@ class UpSetPlot():
         return fig, ax_intbars, ax_intmatrix, ax_setsize, tuple(add_ax)
 
     def _color_for_query(self, query):
+        """
+        Helper function that returns the standard dark grey for non-queried intersections, and the color assigned to
+        a query when the class was instantiated otherwise
+        :param query: frozenset.
+        :return: color as length 4 array.
+        """
         query_color = self.query2color.setdefault(query, self.greys[1])
         return query_color
 
     def _zorder_for_query(self, query):
+        """
+        Helper function that returns 0 for non-queried intersections, and the zorder assigned to
+        a query when the class was instantiated otherwise
+        :param query: frozenset.
+        :return: zorder as int.
+        """
         query_zorder = self.query2zorder.setdefault(query, 0)
         return query_zorder
 
     def main_plot(self, ordered_dfs, ordered_df_names, ordered_in_sets, ordered_out_sets, ordered_inters_sizes):
+        """
+        Creates the main graph comprising bar plot of base set sizes, bar plot of intersection sizes and intersection
+        matrix.
+
+        :param ordered_dfs: array of input data frames, sorted w.r.t. the sorting parameters provided by the user (if
+        any)
+
+        :param ordered_df_names: array of names of input data frames, sorted (as above)
+
+        :param ordered_in_sets: list of tuples. Each tuple represents an intersection. The list must be sorted as the
+        other parameters.
+
+        :param ordered_out_sets: list of tuples. Each tuple represents the sets excluded from the corresponding
+        intersection described by ordered_in_sets.
+
+        :param ordered_inters_sizes: array of ints. Contains the intersection sizes, sorted as the other arguments.
+
+        :return: dictionary containing figure and axes references.
+        """
         ylim = self._base_sets_plot(ordered_dfs, ordered_df_names)
         xlim = self._inters_sizes_plot(ordered_in_sets, ordered_inters_sizes)
         set_row_map = dict(zip(ordered_df_names, self.y_values))
@@ -183,6 +233,13 @@ class UpSetPlot():
                 'base_set_size': self.ax_setsize}
 
     def _base_sets_plot(self, sorted_sets, sorted_set_names):
+        """
+        Plots horizontal bar plot for base set sizes.
+
+        :param sorted_sets: list of data frames, sorted according to user's directives.
+        :param sorted_set_names: list of names for the data frames.
+        :return: Axes.
+        """
         ax = self.ax_setsize
         ax.invert_xaxis()
         height = .6
@@ -218,6 +275,15 @@ class UpSetPlot():
         return ax.get_ylim()
 
     def _strip_axes(self, ax, keep_spines=None, keep_ticklabels=None):
+        """
+        Removes spines and tick labels from ax, except those specified by the user.
+
+        :param ax: Axes on which to operate.
+        :param keep_spines: Names of spines to keep.
+        :param keep_ticklabels: Names of tick labels to keep.
+
+        Possible names are 'left'|'right'|'top'|'bottom'.
+        """
         tick_params_dict = {'which': 'both',
                             'bottom': 'off',
                             'top': 'off',
@@ -241,6 +307,15 @@ class UpSetPlot():
                 spine.set_visible(False)
 
     def _inters_sizes_plot(self, ordered_in_sets, inters_sizes):
+        """
+        Plots bar plot for intersection sizes.
+        :param ordered_in_sets: array of tuples. Each tuple represents an intersection. The array is sorted according
+        to the user's directives
+
+        :param inters_sizes: array of ints. Sorted, likewise.
+
+        :return: Axes
+        """
         ax = self.ax_intbars
         width = .5
         self._strip_axes(ax, keep_spines=['left'], keep_ticklabels=['left'])
@@ -270,6 +345,22 @@ class UpSetPlot():
         return ax.get_xlim()
 
     def _inters_matrix(self, ordered_in_sets, ordered_out_sets, xlims, ylims, set_row_map):
+        """
+        Plots intersection matrix.
+
+        :param ordered_in_sets: Array of tuples representing sets included in an intersection. Sorted according to
+        the user's directives.
+
+        :param ordered_out_sets: Array of tuples representing sets excluded from an intersection. Sorted likewise.
+
+        :param xlims: tuple. x limits for the intersection matrix plot.
+
+        :param ylims: tuple. y limits for the intersection matrix plot.
+
+        :param set_row_map: dict. Maps data frames (base sets) names to a row of the intersection matrix
+
+        :return: Axes
+        """
         ax = self.ax_intmatrix
         ax.set_xlim(xlims)
         ax.set_ylim(ylims)
@@ -304,7 +395,21 @@ class UpSetPlot():
             ax.vlines(self.x_values[col_num], min(in_y), max(in_y), lw=3.5, color=self._color_for_query(frozenset(
                 in_sets)))
 
-    def _scatter(self, ax_index, data_values, plot_kwargs, *, labels = None):
+    def _scatter(self, ax_index, data_values, plot_kwargs, *, labels=None):
+        """
+        Scatter plot (for additional plots).
+
+        :param ax_index: int. Index for the relevant axes (additional plots' axes are stored in a list)
+
+        :param data_values: list of dictionary. Each dictionary is like {'x':data_for_x, 'y':data_for_y,
+        'in_sets':tuple}, where the tuple represents the intersection the data for x and y belongs to.
+
+        :param plot_kwargs: kwargs accepted by matplotlib scatter
+
+        :param labels: dictionary. {'x':'x_label', 'y':'y_label'}
+
+        :return: Axes
+        """
         ax = self.add_plots_axes[ax_index]
 
         for data_item in data_values:
@@ -334,10 +439,17 @@ class UpSetPlot():
 
 
 class DataExtractor:
-    def __init__(self, data_dict, columns):
-        self.columns = columns if len(columns) > 1 else columns[0]
+    def __init__(self, data_dict, unique_keys):
+        """
+        Packages the data in a way that can be consumed by the plot methods in UpSetPlot.
+
+        :param data_dict: dict. {'name': pandas DataFrame}
+
+        :param unique_keys: list of names of columns that uniquely identify a row in the data frames.
+        """
+        self.unique_keys = unique_keys if len(unique_keys) > 1 else unique_keys[0]
         self.ordered_dfs, self.ordered_df_names, self.df_dict = self.extract_base_sets_data(data_dict,
-                                                                                            columns)
+                                                                                            unique_keys)
         self.in_sets_list, self.inters_degrees, \
         self.out_sets_list, self.inters_df_dict = self.extract_intersection_data()
         self.extract_data_for = {
@@ -345,13 +457,22 @@ class DataExtractor:
         }
 
 
-    def extract_base_sets_data(self, data_dict, columns):
+    def extract_base_sets_data(self, data_dict, unique_keys):
+        """
+        Extracts data for the bar graph of the base sets sizes.
+
+        :param data_dict: dict. {'name': data frame}
+
+        :param unique_keys: list of column names to uniquely identify rows.
+
+        :return: list of data frames sorted by shape[0], list of names sorted accordingly, dictionary zipping the two.
+        """
         dfs = []
         df_names = []
         # extract interesting columns from dfs
         for name, df in data_dict.items():
             df_names.append(name)
-            dfs.append(df[columns])
+            dfs.append(df[unique_keys])
         df_names = np.array(df_names)
         # order dfs
         base_sets_order = np.argsort([x.shape[0] for x in dfs])[::-1]
@@ -362,6 +483,13 @@ class DataExtractor:
         return ordered_base_sets, ordered_base_set_names, set_dict
 
     def extract_intersection_data(self):
+        """
+        Extract data to use in intersection bar plot and matrix.
+
+        :return: list of tuples (sets included in intersections), list of integers (corresponding degrees of
+        intersections), list of tuples (sets excluded from intersections), dict {tuple:data frame}, where each data
+        frame contains only the rows corresponding to the intersection described by the tuple-key.
+        """
         in_sets_list = []
         out_sets_list = []
         inters_dict = {}
@@ -376,14 +504,14 @@ class DataExtractor:
             out_sets_list.append(set(out_sets))
 
             seed = in_sets_l.pop()
-            exclusive_intersection = pd.Index(self.df_dict[seed][self.columns])
+            exclusive_intersection = pd.Index(self.df_dict[seed][self.unique_keys])
             for s in in_sets_l:
                 exclusive_intersection = exclusive_intersection.intersection(pd.Index(self.df_dict[s][
-                                                                                          self.columns]))
+                    self.unique_keys]))
             for s in out_sets:
                 exclusive_intersection = exclusive_intersection.difference(pd.Index(self.df_dict[s][
-                                                                                        self.columns]))
-            final_df = self.df_dict[seed].set_index(pd.Index(self.df_dict[seed][self.columns])).ix[
+                    self.unique_keys]))
+            final_df = self.df_dict[seed].set_index(pd.Index(self.df_dict[seed][self.unique_keys])).ix[
                 exclusive_intersection].reset_index(drop=True)
             inters_dict[in_sets] = final_df
 
@@ -391,11 +519,14 @@ class DataExtractor:
 
     def get_filtered_intersections(self, sort_by, inters_size_bounds, inters_degree_bounds):
         """
+        Filter the intersection data according to the user's directives and return it.
 
-        :param columns: dict of columns, one k-v pair per dataframe.
-        :return:
+        :param sort_by: 'degree'|'size'. Whether to sort intersections by degree or size.
+        :param inters_size_bounds: tuple. Specifies the size interval of the intersections that will be plotted.
+        :param inters_degree_bounds: tuple. Specifies the degree interval of the intersections that will be plotted.
+        :return: Array of int (sizes), array of tuples (sets included in intersection), array of tuples (sets
+        excluded from intersection), all filtered and sorted.
         """
-
         inters_sizes = np.array([self.inters_df_dict[x].shape[0] for x in self.in_sets_list])
         inters_degrees = np.array(self.inters_degrees)
 
@@ -420,12 +551,14 @@ class DataExtractor:
 
         return self.filtered_inters_sizes, self.filtered_in_sets, self.filtered_out_sets
 
-        # TODO: adjust figure size depending on number of graphs
-        # TODO: adjust bracket size in base-set plots
-        # TODO: support for: histograms, bar charts, time series - CAN THIS BE MADE COMPLETELY CUSTOM?
-
     def __extract_data_for_scatter(self, *, x=None, y=None):
+        """
+        Extract data for scatter plot.
 
+        :param x: str. Name of column containing data for x coordinates.
+        :param y: str. Name of column containing data for y coordinates.
+        :return: list of dict. [{'x':data_for_x, 'y':data_for_y, 'in_sets':tuple_of_included_sets]
+        """
         data_values = [dict(zip(['x', 'y', 'in_sets'],
                                 [self.inters_df_dict[a][x].values,
                                  self.inters_df_dict[a][y].values,
@@ -441,5 +574,13 @@ if __name__ == '__main__':
     f.close()
     plot(data_dict, unique_keys=['title'], sort_by='degree', inters_size_bounds=(20, np.inf),
          query=[('action',), ('romance', 'action'), ('romance',)],
-                 additional_plots=[{'kind':'scatter', 'data':{'x':'rating_avg', 'y':'rating_std'}},
-                          {'kind':'scatter', 'data':{'x':'rating_avg', 'y':'rating_std'}}])
+         additional_plots=[{'kind': 'scatter', 'data': {'x': 'rating_avg', 'y': 'rating_std'}},
+                           {'kind': 'scatter', 'data': {'x': 'rating_avg', 'y': 'rating_std'}}])
+
+
+# TODO: if possible, remove horrible hack that uses Index instead of pd.merge
+# TODO: adjust figure size depending on number of graphs
+# TODO: adjust bracket size in base-set plots
+# TODO: support for: histograms, bar charts, time series - CAN THIS BE MADE COMPLETELY CUSTOM?
+# TODO: Finish documentation
+# TODO: remove black edge around bars
