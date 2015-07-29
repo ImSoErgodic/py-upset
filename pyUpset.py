@@ -1,45 +1,187 @@
 __author__ = 'leo@opensignal.com'
 
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from itertools import chain, combinations
-import pandas as pd
 
 
-def plot(data_dict, columns, sort_by='size', inters_size_bounds=(0, np.inf), inters_degree_bounds=(1, np.inf),
-         additional_plots=None):
+def plot(data_dict, *, unique_keys=None, sort_by='size', inters_size_bounds=(0, np.inf),
+         inters_degree_bounds=(1, np.inf), additional_plots=None, query=None):
     """
-    Wrapper function that initialises an UpSet class and calls its plot() method with the passed parameters.
+    Plots a main set of graph showing intersection size, intersection matrix and the size of base sets. If given,
+    additional plots are placed below the main graph.
 
-    :param sets: set object containing the data to intersect.
-    :param set_names: list-like. Must contain non-empty strings.
-    :param sort_by: str. 'size | degree'.
-    :param inters_size_bounds: tuple. The minimum and maximum (inclusive) size allowed for an intersection to be
-    plotted.
-    :param inters_degree_bounds: tuple. The minimum and maximum (inclusive) degree allowed for an intersection to
-    be plotted.
-    :return: figure and axes containing the plots.
+    :param data_dict: dictionary like {data_frame_name: data_frame}
+
+    :param unique_keys: list. Specifies the names of the columns that, together, can uniquely identify a row. If left
+    empty, pyUpSet will try to use all common columns in the data frames and may possibly raise an exception (no
+    common columns) or produce unexpected results (columns in different data frames with same name but different
+    meanings/data).
+
+    :param sort_by: 'size' or 'degree'. The order in which to sort the intersection bar chart and matrix in the main
+    graph
+
+    :param inters_size_bounds: tuple. Specifies the size limits of the intersections that will be displayed.
+    Intersections (and relative data) whose size is outside the interval will not be plotted. Defaults to (0, np.inf).
+
+    :param inters_degree_bounds: tuple. Specified the degree limits of the intersections that will be displayed.
+    Intersections (and relative data) whose degree is outside the interval will not be plotted. Defaults to (0, np.inf).
+
+    :param additional_plots: list of dictionaries. See below for details.
+
+    :param query: list of tuples. See below for details.
+
+    :return: dictionary of matplotlib objects, namely the figure and the axes.
+
+    :raise ValueError: if no unique_keys are specified and the data frames have no common column names.
+
+    The syntax to specify additional plots follows the signature of the corresponding matplotlib method in an Axes
+    class. For each additional plot one specifies a dictionary with the kind of plot, the columns name to retrieve
+    relevant data and the kwargs to pass to the plot function, as in `{'kind':'scatter', 'data':{'x':'col_1',
+    'y':'col_2'}, 'kwargs':{'s':50}}`.
+
+    It is also possible to highlight intersections. This is done through the `query` argument, where the
+    intersections to highligh must be specified with the names used as keys in the data_dict.
+
     """
-    return UpSet(__PlotData(data_dict)).plot(columns, sort_by, inters_size_bounds=inters_size_bounds,
-                                             inters_degree_bounds=inters_degree_bounds,
-                                             additional_plots=additional_plots)
+    ap = [] if additional_plots is None else additional_plots
+    all_columns = unique_keys if unique_keys is not None else __get_all_common_columns(data_dict)
+    all_columns = list(all_columns)
+
+    plot_data = DataExtractor(data_dict, all_columns)
+    ordered_inters_sizes, ordered_in_sets, ordered_out_sets = plot_data.get_filtered_intersections(sort_by,
+                                                                                                   inters_size_bounds,
+                                                                                                   inters_degree_bounds)
+    ordered_dfs, ordered_df_names = plot_data.ordered_dfs, plot_data.ordered_df_names
+
+    upset = UpSetPlot(len(ordered_dfs), len(ordered_in_sets), additional_plots, query)
+    fig_dict = upset.main_plot(ordered_dfs, ordered_df_names, ordered_in_sets, ordered_out_sets,
+                                  ordered_inters_sizes)
+    fig_dict['additional'] = []
+
+    for i, pl in enumerate(ap):
+        plot_kind = pl['kind']
+        data_values = plot_data.extract_data_for[plot_kind](**pl['data'])
+        graph_kwargs = pl['graph_kwargs'] if pl.__contains__('graph_kwargs') else {}
+        pm = upset._plot_method[plot_kind]
+        ax = pm(i, data_values, graph_kwargs)
+        fig_dict['additional'].append(ax)
+
+    return fig_dict
 
 
-class UpSet():
-    def __init__(self, plot_data):
+def __get_all_common_columns(data_dict):
+    """
+    Computes an array of (unique) common columns to the data frames in data_dict
+    :param data_dict: Dictionary of data frames
+    :return: array.
+    """
+    common_columns = []
+    for i, k in enumerate(data_dict.keys()):
+        if i == 0:
+            common_columns = data_dict[k].columns
+        else:
+            common_columns = common_columns.intersection(data_dict[k].columns)
+    if common_columns.values:
+        raise ValueError('Data frames should have homogeneous columns with the same name to use for computing '
+                         'intersections')
+    return common_columns.unique()
+
+
+class UpSetPlot():
+    def __init__(self, rows, cols, additional_plots, query):
         """
         Class linked to a data set; it contains the methods to produce plots according to the UpSet representation.
-        :type plot_data: __PlotData
+        :type plot_data: DataExtractor
         :param plot_data: PlotData object
         """
-        self.plot_data = plot_data
+
+        # set standard colors
         self.greys = plt.cm.Greys([.22, .8])
+
+        # map of additional plot names to internal methods
         self._plot_method = {
-            'scatter':self._scatter
+            'scatter': self._scatter
         }
 
-    def _base_sets_plot(self, ax, sorted_sets, sorted_set_names):
+        # map queries to graphic properties
+        self.query = [] if query is None else query
+        qu_col = plt.cm.rainbow(np.linspace(.01, .99, len(self.query)))
+        self.query2color = dict(zip([frozenset(q) for q in self.query], qu_col))
+        self.query2zorder = dict(zip([frozenset(q) for q in self.query], np.arange(len(self.query)) + 1))
+
+        # set figure properties
+        self.rows = rows
+        self.cols = cols
+        self.x_values, self.y_values = self._create_coordinates(rows, cols)
+        self.fig, self.ax_intbars, self.ax_intmatrix, \
+        self.ax_setsize, self.add_plots_axes = self._prepare_figure(additional_plots)
+
+        # single dictionary may be fragile - I leave it here as a future option
+        # self.query2kwargs = dict(zip([frozenset(q) for q in self.query],
+        # [dict(zip(['color', 'zorder'],
+        # [col, 1])) for col in qu_col]))
+
+    def _create_coordinates(self, rows, cols):
+        x_values = (np.arange(cols) + 1)
+        y_values = (np.arange(rows) + 1)
+        return x_values, y_values
+
+    def _prepare_figure(self, additional_plots):
+        fig = plt.figure(figsize=(16, 10))
+        if additional_plots:
+            main_gs = gridspec.GridSpec(3, 1, hspace=.6)
+            topgs = main_gs[:2, 0]
+            botgs = main_gs[2, 0]
+        else:
+            topgs = gridspec.GridSpec(1, 1)[0, 0]
+        fig_cols = self.cols + 3
+        fig_rows = self.rows + self.rows * 4
+
+        gs_top = gridspec.GridSpecFromSubplotSpec(fig_rows, fig_cols, subplot_spec=topgs, wspace=.1, hspace=.2)
+        setsize_w, setsize_h = 3, self.rows
+        intmatrix_w, intmatrix_h = setsize_w + self.cols, self.rows
+        intbars_w, intbars_h = setsize_w + self.cols, self.rows * 4
+        ax_setsize = plt.subplot(gs_top[-1:-setsize_h, 0:setsize_w])
+        ax_intmatrix = plt.subplot(gs_top[-1:-intmatrix_h, setsize_w:intmatrix_w])
+        ax_intbars = plt.subplot(gs_top[:self.rows * 4 - 1, setsize_w:intbars_w])
+
+        add_ax = []
+        if additional_plots:
+            num_plots = len(additional_plots)
+            num_bot_rows, num_bot_cols = int(np.ceil(num_plots / 2)), 2
+            gs_bottom = gridspec.GridSpecFromSubplotSpec(num_bot_rows, num_bot_cols,
+                                                         subplot_spec=botgs, wspace=.15, hspace=.2)
+            from itertools import product
+
+            for r, c in product(range(num_bot_rows), range(num_bot_cols)):
+                new_plotL = plt.subplot(gs_bottom[r, c])
+                add_ax.append(new_plotL)
+
+        return fig, ax_intbars, ax_intmatrix, ax_setsize, tuple(add_ax)
+
+    def _color_for_query(self, query):
+        query_color = self.query2color.setdefault(query, self.greys[1])
+        return query_color
+
+    def _zorder_for_query(self, query):
+        query_zorder = self.query2zorder.setdefault(query, 0)
+        return query_zorder
+
+    def main_plot(self, ordered_dfs, ordered_df_names, ordered_in_sets, ordered_out_sets, ordered_inters_sizes):
+        ylim = self._base_sets_plot(ordered_dfs, ordered_df_names)
+        xlim = self._inters_sizes_plot(ordered_in_sets, ordered_inters_sizes)
+        set_row_map = dict(zip(ordered_df_names, self.y_values))
+        self._inters_matrix(ordered_in_sets, ordered_out_sets, xlim, ylim, set_row_map)
+        return {'figure': self.fig,
+                'intersection_bars':self.ax_intbars,
+                'intersection_matrix':self.ax_intmatrix,
+                'base_set_size':self.ax_setsize}
+
+    def _base_sets_plot(self, sorted_sets, sorted_set_names):
+        ax = self.ax_setsize
         ax.invert_xaxis()
         height = .6
         bar_bottoms = self.y_values - height / 2
@@ -64,7 +206,7 @@ class UpSet():
                         arrowprops=dict(arrowstyle="-[",
                                         shrinkA=1,
                                         shrinkB=3,
-                                        connectionstyle='arc,angleA=-180, angleB=180, armB=30' #widthB to control
+                                        connectionstyle='arc,angleA=-180, angleB=180, armB=30'  # widthB to control
                                         # bracket
                                         ),
                         )
@@ -96,14 +238,16 @@ class UpSet():
             if sname not in keep_spines:
                 spine.set_visible(False)
 
-    def _inters_sizes_plot(self, ax, inters_sizes):
+    def _inters_sizes_plot(self, ordered_in_sets, inters_sizes):
+        ax = self.ax_intbars
         width = .5
-
         self._strip_axes(ax, keep_spines=['left'], keep_ticklabels=['left'])
 
         bar_bottom_left = self.x_values - width / 2
 
-        ax.bar(bar_bottom_left, inters_sizes, width=width, color=self.greys[1])
+        bar_colors = [self._color_for_query(frozenset(inter)) for inter in ordered_in_sets]
+
+        ax.bar(bar_bottom_left, inters_sizes, width=width, color=bar_colors)
 
         ylim = ax.get_ylim()
         label_vertical_gap = (ylim[1] - ylim[0]) / 60
@@ -123,7 +267,8 @@ class UpSet():
 
         return ax.get_xlim()
 
-    def _inters_matrix(self, ax, ordered_in_sets, ordered_out_sets, xlims, ylims, set_row_map):
+    def _inters_matrix(self, ordered_in_sets, ordered_out_sets, xlims, ylims, set_row_map):
+        ax = self.ax_intmatrix
         ax.set_xlim(xlims)
         ax.set_ylim(ylims)
 
@@ -148,180 +293,105 @@ class UpSet():
             # out_circles = [Circle((self.x_values[col_num], y), radius=dot_size, color=self.greys[0]) for y in out_y]
             # for c in chain.from_iterable([in_circles, out_circles]):
             # ax.add_patch(c)
-            ax.scatter(np.repeat(self.x_values[col_num], len(in_y)), in_y, color=self.greys[1], s=300)
+            ax.scatter(np.repeat(self.x_values[col_num], len(in_y)), in_y, color=self._color_for_query(frozenset(
+                in_sets)), s=300)
             ax.scatter(np.repeat(self.x_values[col_num], len(out_y)), out_y, color=self.greys[0], s=300)
-            ax.vlines(self.x_values[col_num], min(in_y), max(in_y), lw=3.5, color=self.greys[1])
+            ax.vlines(self.x_values[col_num], min(in_y), max(in_y), lw=3.5, color=self._color_for_query(frozenset(
+                in_sets)))
 
-    def _create_coordinates(self, sets, inters_sizes):
-        self.rows = len(sets)
-        self.cols = len(inters_sizes)
-        self.x_values = (np.arange(self.cols) + 1)
-        self.y_values = (np.arange(self.rows) + 1)
+    def _scatter(self, ax_index, data_values, plot_kwargs):
+        ax = self.add_plots_axes[ax_index]
 
-    def _prepare_figure(self, additional_plots):
-
-        fig = plt.figure(figsize=(16, 10))
-        if additional_plots:
-            main_gs = gridspec.GridSpec(3, 1, hspace=1)
-            topgs = main_gs[:2, 0]
-            botgs = main_gs[2, 0]
-        else:
-            topgs = gridspec.GridSpec(1, 1)[0, 0]
-        fig_cols = self.cols + 3
-        fig_rows = self.rows + self.rows * 4
-
-        gs_top = gridspec.GridSpecFromSubplotSpec(fig_rows, fig_cols, subplot_spec=topgs, wspace=.1, hspace=.2)
-        setsize_w, setsize_h = 3, self.rows
-        intmatrix_w, intmatrix_h = setsize_w + self.cols, self.rows
-        intbars_w, intbars_h = setsize_w + self.cols, self.rows * 4
-        ax_setsize = plt.subplot(gs_top[-1:-setsize_h, 0:setsize_w])
-        ax_intmatrix = plt.subplot(gs_top[-1:-intmatrix_h, setsize_w:intmatrix_w])
-        ax_intbars = plt.subplot(gs_top[:self.rows * 4 - 1, setsize_w:intbars_w])
-
-        add_ax = []
-        if additional_plots:
-            num_plots = len(additional_plots)
-            bot_rows, bot_cols = int(np.ceil(num_plots / 2)), 2
-            gs_bottom = gridspec.GridSpecFromSubplotSpec(bot_rows, bot_cols,
-                                                         subplot_spec=botgs, wspace=.3, hspace=.3)
-            print(bot_rows)
-            for i in range(num_plots):
-                new_plotL = plt.subplot(gs_bottom[i, i%2])
-                add_ax.append(new_plotL)
-
-        return fig, (ax_intbars, ax_intmatrix, ax_setsize), tuple(add_ax)
-
-    def plot(self, columns, sort_by='size', inters_size_bounds=(0, np.inf), inters_degree_bounds=(1, np.inf),
-             additional_plots=None):
-        """
-        Plots intersections ignoring those with degree or size outside the boundaries passed as arguments.
-        Intersections can be sorted by size or degree.
-        :param columns: dict. {'name':'name of column to use in intersection'}
-        :param sort_by: str. "size | degree".
-        :param inters_size_bounds: tuple. The minimum and maximum (inclusive) size allowed for an intersection to be
-        plotted.
-        :param inters_degree_bounds: tuple. The minimum and maximum (inclusive) degree allowed for an intersection to
-        be plotted.
-        :return: figure and list of axes produced.
-        """
-
-        ordered_base_sets, ordered_base_set_names = self.plot_data.extract_base_sets_data(columns)
-        ordered_inters_sizes, ordered_in_sets, ordered_out_sets = self.plot_data \
-            .extract_intersections_data(sort_by, inters_size_bounds, inters_degree_bounds)
-
-        self._create_coordinates(ordered_base_sets, ordered_inters_sizes)
-        add_plots = ()
-        fig, (ax_intbars, ax_intmatrix, ax_setsize), add_plots = self._prepare_figure(additional_plots)
-        print(add_plots)
-
-        set_row_map = dict(zip(ordered_base_set_names, self.y_values))
-        ylim = self._base_sets_plot(ax_setsize, ordered_base_sets, ordered_base_set_names)
-        xlim = self._inters_sizes_plot(ax_intbars, ordered_inters_sizes)
-        self._inters_matrix(ax_intmatrix, ordered_in_sets, ordered_out_sets, xlim, ylim, set_row_map)
-
-        for i, ax in enumerate(add_plots):
-            print('additional')
-            plot_kind = additional_plots[i]['kind']
-            plot_kwargs = additional_plots[i]['kwargs']
-            pm = self._plot_method[plot_kind]
-            pm(ax, **(self.plot_data.extract_for_plot[plot_kind](**plot_kwargs)))
-
-
-        return fig, [ax_intbars, ax_intmatrix, ax_intbars]
-
-    def _scatter(self, ax, x_vars, y_vars, colors):
-        # xvars and yvars are lists of xy couples to plot, one for each query
-        for i, (x, y) in enumerate(zip(x_vars, y_vars)):
-            ax.scatter(x, y, alpha=.3, color=colors[i], edgecolor=None)
-
-        print('plotted!')
-
-        self._strip_axes(ax, keep_spines=['bottom', 'left'], keep_ticklabels=['bottom', 'left'])
+        for data_item in data_values:
+            ax.scatter(x=data_item['x'], y=data_item['y'],
+                       color=self._color_for_query(frozenset(data_item['in_sets'])),
+                       alpha=.3,
+                       zorder=self._zorder_for_query(frozenset(data_item['in_sets'])),
+                       **plot_kwargs)
 
         ax.ticklabel_format(style='sci', axis='y', scilimits=(0, 4))
 
+        self._strip_axes(ax, keep_spines=['bottom', 'left'], keep_ticklabels=['bottom', 'left'])
         ylim, xlim = ax.get_ylim(), ax.get_xlim()
         gap_y, gap_x = max(ylim) / 500.0 * 20, max(xlim) / 500.0 * 20
         ax.set_ylim(ylim[0] - gap_y, ylim[1] + gap_y)
         ax.set_xlim(xlim[0] - gap_x, xlim[1] + gap_x)
         ylim, xlim = ax.get_ylim(), ax.get_xlim()
         ax.spines['left'].set_bounds(ylim[0], ylim[1])
-        ax.spines['bottom'].set_bounds(xlim[0], ylim[0])
+        ax.spines['bottom'].set_bounds(xlim[0], xlim[1])
+
+        return ax
 
 
-class __PlotData:
-    def __init__(self, data_dict):
-        self.data_dict = data_dict
-        self.ordered_base_set_names, self.ordered_base_sets, self.set_dict = np.repeat(None, 3)
-        self.extract_for_plot = {
-            'scatter':self.extract_scatter_data
+class DataExtractor:
+    def __init__(self, data_dict, columns):
+        self.columns = columns
+        self.ordered_dfs, self.ordered_df_names, self.df_dict = self.extract_base_sets_data(data_dict,
+                                                                                            columns)
+        self.in_sets_list, self.inters_degrees, \
+        self.out_sets_list, self.inters_df_dict = self.extract_intersection_data()
+        self.extract_data_for = {
+            'scatter': self.__extract_data_for_scatter
         }
 
-    def extract_base_sets_data(self, columns):
-        # Extract the columns as sets to intersect
-        sets = []
-        set_names = []
-        if len(columns) != len(self.data_dict):
-            raise ValueError("columns argument must specify one column per DataFrame")
-        for (dfname, setname) in columns.items():
-            sets.append(set(self.data_dict[dfname][setname].values))
-            set_names.append('%s[%s]' % (dfname, setname))
 
-        base_sets = np.array(sets)
-        base_set_names = np.array(set_names)
+    def extract_base_sets_data(self, data_dict, columns):
+        dfs = []
+        df_names = []
+        # extract interesting columns from dfs
+        for name, df in data_dict.items():
+            df_names.append(name)
+            dfs.append(df[columns])
+        df_names = np.array(df_names)
+        # order dfs
+        base_sets_order = np.argsort([x.shape[0] for x in dfs])[::-1]
+        ordered_base_set_names = df_names[base_sets_order]
+        ordered_base_sets = [data_dict[name] for name in ordered_base_set_names]
+        set_dict = dict(zip(ordered_base_set_names, ordered_base_sets))
 
-        # order base sets and store
-        base_sets_order = np.argsort([len(x) for x in sets])[::-1]
-        self.ordered_base_sets = base_sets[base_sets_order]
-        self.ordered_base_set_names = base_set_names[base_sets_order]
-        self.set_dict = dict(zip(self.ordered_base_set_names, self.ordered_base_sets))
+        return ordered_base_sets, ordered_base_set_names, set_dict
 
-        return self.ordered_base_sets, self.ordered_base_set_names
+    def extract_intersection_data(self):
+        in_sets_list = []
+        out_sets_list = []
+        inters_dict = {}
+        inters_degrees = []
+        for col_num, in_sets in enumerate(chain.from_iterable(
+                combinations(self.ordered_df_names, i) for i in np.arange(1, len(self.ordered_dfs) + 1))):
 
-    def extract_intersections_data(self, sort_by, inters_size_bounds, inters_degree_bounds):
+            inters_degrees.append(len(in_sets))
+            in_sets_list.append(in_sets)
+            out_sets = set(self.ordered_df_names).difference(set(in_sets))
+            in_sets_l = list(in_sets)
+            out_sets_list.append(set(out_sets))
+
+            seed = in_sets_l.pop()
+            exclusive_intersection = pd.Index(self.df_dict[seed][self.columns])
+            for s in in_sets_l:
+                exclusive_intersection = exclusive_intersection.intersection(pd.Index(self.df_dict[s][self.columns]))
+            for s in out_sets:
+                exclusive_intersection = exclusive_intersection.difference(pd.Index(self.df_dict[s][self.columns]))
+            final_df = self.df_dict[seed].set_index(pd.Index(self.df_dict[seed][self.columns])).ix[
+                exclusive_intersection].reset_index(drop=True)
+            inters_dict[in_sets] = final_df
+
+        return in_sets_list, inters_degrees, out_sets_list, inters_dict
+
+    def get_filtered_intersections(self, sort_by, inters_size_bounds, inters_degree_bounds):
         """
 
         :param columns: dict of columns, one k-v pair per dataframe.
         :return:
         """
 
-        try:
-            self.ordered_base_sets, self.ordered_base_set_names
-        except AttributeError as e:
-            print("Base sets must be extracted before it's possible to compute their intersections.")
-            raise
-
-        # Compute the intersection values
-        in_sets_list = []
-        out_sets_list = []
-        inters_sizes = []
-        inters_degrees = []
-
-        for col_num, in_sets in enumerate(chain.from_iterable(
-                combinations(self.ordered_base_set_names, i) for i in np.arange(1, len(self.ordered_base_sets) + 1))):
-
-            inters_degrees.append(len(in_sets))
-            in_sets_list.append(in_sets)
-            in_sets = list(in_sets)
-            out_sets = set(self.ordered_base_set_names).difference(in_sets)
-            out_sets_list.append(tuple(out_sets))
-            exclusive_intersection = set(self.set_dict[in_sets.pop()])
-
-            for s in in_sets:
-                exclusive_intersection.intersection_update(self.set_dict[s])
-            for s in out_sets:
-                exclusive_intersection.difference_update(self.set_dict[s])
-
-            inters_sizes.append(len(exclusive_intersection))
-
-        inters_sizes = np.array(inters_sizes)
-        inters_degrees = np.array(inters_degrees)
+        inters_sizes = np.array([self.inters_df_dict[x].shape[0] for x in self.in_sets_list])
+        inters_degrees = np.array(self.inters_degrees)
 
         size_clip = (inters_sizes <= inters_size_bounds[1]) & (inters_sizes >= inters_size_bounds[0]) & (
             inters_degrees >= inters_degree_bounds[0]) & (inters_degrees <= inters_degree_bounds[1])
 
-        in_sets_list = np.array(in_sets_list)[size_clip]
-        out_sets_list = np.array(out_sets_list)[size_clip]
+        in_sets_list = np.array(self.in_sets_list)[size_clip]
+        out_sets_list = np.array(self.out_sets_list)[size_clip]
         inters_sizes = inters_sizes[size_clip]
         inters_degrees = inters_degrees[size_clip]
 
@@ -332,14 +402,30 @@ class __PlotData:
             order = np.argsort(inters_degrees)
 
         # store ordered data
-        self.ordered_inters_sizes = inters_sizes[order]
-        self.ordered_in_sets = in_sets_list[order]
-        self.ordered_out_sets = out_sets_list[order]
+        self.filtered_inters_sizes = inters_sizes[order]
+        self.filtered_in_sets = in_sets_list[order]
+        self.filtered_out_sets = out_sets_list[order]
 
-        return self.ordered_inters_sizes, self.ordered_in_sets, self.ordered_out_sets
+        return self.filtered_inters_sizes, self.filtered_in_sets, self.filtered_out_sets
 
-    def extract_scatter_data(self, x_var, y_var, query=None):
-        x_vals = [df[x_var] for df in self.data_dict.values()]
-        y_vals = [df[y_var] for df in self.data_dict.values()]
-        colors = np.repeat('k', len(self.data_dict))
-        return {'x_vars':x_vals, 'y_vars':y_vals, 'colors':colors}
+        # TODO: adjust figure size depending on number of graphs
+        # TODO: adjust bracket size in base-set plots
+        # TODO: support for: histograms, bar charts, time series - CAN THIS BE MADE COMPLETELY CUSTOM?
+
+    def __extract_data_for_scatter(self, *, x=None, y=None):
+
+        data_values = [dict(zip(['x', 'y', 'in_sets'],
+                                [self.inters_df_dict[a][x].values,
+                                 self.inters_df_dict[a][y].values,
+                                 a])) for a in self.filtered_in_sets]
+        return data_values
+
+
+if __name__ == '__main__':
+    from pickle import load
+
+    f = open('./test_data_dict', 'rb')
+    data_dict = load(f)
+    f.close()
+    plot(data_dict, ['title', 'rating_avg', 'rating_std'],
+         additional_plots=[{'kind': 'scatter', 'data': {'x': 'rating_avg', 'y': 'rating_std'}}])

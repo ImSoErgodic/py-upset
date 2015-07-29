@@ -34,3 +34,9 @@ Please bear in mind the following when using pyUpset:
 * pyUpset is under active development so current behaviour may change at any time
 * Some of the salient features of UpSet like support for additional graphs and intersection query/highlighting are not present yet. They will be introduced shortly and be built on top of pandas
 * __A note on performance__: In some cases computing the intersections of numerous, large sets can be a costly operation. Since the limits of the axes in the figure are computed using the number of intersections that are within the boundaries specified by `inters_size_bounds` and `inters_degree_bounds`, if the two corresponding tuples don't change then generating new plots even for many large sets will be faster than the first run. If new boundaries are specified, then new intersections have to be computed.
+* __A very specific use case__: py-UpSet has a very specific use case: It is focussed on the study of intersections 
+of sets. Hence the queries can _only_ be used to highlight points belonging to particular intersection, one query per
+ intersection. Likewise, in order for highlighting to make sense on additional graphs, it is necessary that the 
+ values being plotted for each data point are unchanged across the various data frames (otherwise it wouldn't make 
+ sense to highlight the markers of a scatterplot on variables x and y corresponding to data points in data frames A 
+ and B when said data points have different x/y values in A and B)
