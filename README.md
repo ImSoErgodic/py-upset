@@ -21,7 +21,6 @@ to produce
 
 Displayed intersections can also be filtered or sorted by size or degree:
 ```
-pyu = reload(pyu)
 pyu.plot(data_dict, unique_keys = ['title'], sort_by='degree', inters_size_bounds=(20, 400))
 ```
 produces
@@ -31,11 +30,10 @@ produces
 
 It is possible to add further plots that use information contained in the data frames, as in 
 ```
-pyu = reload(pyu)
 pyu.plot(data_dict, unique_keys = ['title'], 
          additional_plots=[{'kind':'scatter', 'data':{'x':'rating_avg', 'y':'rating_std'}},
-                           {'kind':'scatter', 'data':{'x':'rating_avg', 'y':'rating_std'}}]) # identical subgraphs 
-                           only for demonstration purposes
+                           {'kind':'scatter', 'data':{'x':'rating_avg', 'y':'rating_std'}}]) 
+         # identical subgraphs only for demonstration purposes
 ```
 This produces
 ![alt text](https://github.com/ImSoErgodic/py-upset/blob/master/basic_w_subplots.png "")
@@ -48,7 +46,6 @@ pyUpSet supports the highlighting of  "queries", which are essentially a represe
 . For example, the following call produces graphs where all data belonging to the intersection of the "romance" and 
 "adventure" sets is highlighted.
 ```
-pyu = reload(pyu)
 pyu.plot(data_dict, unique_keys = ['title'],
          additional_plots=[{'kind':'scatter', 'data':{'x':'rating_avg', 'y':'rating_std'}},
                            {'kind':'scatter', 'data':{'x':'rating_avg', 'y':'rating_std'}}],
