@@ -42,6 +42,8 @@ def plot(data_dict, *, unique_keys=None, sort_by='size', inters_size_bounds=(0, 
     relevant data and the kwargs to pass to the plot function, as in `{'kind':'scatter', 'data':{'x':'col_1',
     'y':'col_2'}, 'kwargs':{'s':50}}`.
 
+    Currently supported additional plots: scatter.
+
     It is also possible to highlight intersections. This is done through the `query` argument, where the
     intersections to highligh must be specified with the names used as keys in the data_dict.
 
@@ -58,7 +60,7 @@ def plot(data_dict, *, unique_keys=None, sort_by='size', inters_size_bounds=(0, 
 
     upset = UpSetPlot(len(ordered_dfs), len(ordered_in_sets), additional_plots, query)
     fig_dict = upset.main_plot(ordered_dfs, ordered_df_names, ordered_in_sets, ordered_out_sets,
-                                  ordered_inters_sizes)
+                               ordered_inters_sizes)
     fig_dict['additional'] = []
 
     for i, pl in enumerate(ap):
@@ -66,7 +68,7 @@ def plot(data_dict, *, unique_keys=None, sort_by='size', inters_size_bounds=(0, 
         data_values = plot_data.extract_data_for[plot_kind](**pl['data'])
         graph_kwargs = pl['graph_kwargs'] if pl.__contains__('graph_kwargs') else {}
         pm = upset._plot_method[plot_kind]
-        ax = pm(i, data_values, graph_kwargs)
+        ax = pm(i, data_values, graph_kwargs, labels = pl['data'])
         fig_dict['additional'].append(ax)
 
     return fig_dict
@@ -84,7 +86,7 @@ def __get_all_common_columns(data_dict):
             common_columns = data_dict[k].columns
         else:
             common_columns = common_columns.intersection(data_dict[k].columns)
-    if common_columns.values:
+    if len(common_columns.values) == 0:
         raise ValueError('Data frames should have homogeneous columns with the same name to use for computing '
                          'intersections')
     return common_columns.unique()
@@ -176,9 +178,9 @@ class UpSetPlot():
         set_row_map = dict(zip(ordered_df_names, self.y_values))
         self._inters_matrix(ordered_in_sets, ordered_out_sets, xlim, ylim, set_row_map)
         return {'figure': self.fig,
-                'intersection_bars':self.ax_intbars,
-                'intersection_matrix':self.ax_intmatrix,
-                'base_set_size':self.ax_setsize}
+                'intersection_bars': self.ax_intbars,
+                'intersection_matrix': self.ax_intmatrix,
+                'base_set_size': self.ax_setsize}
 
     def _base_sets_plot(self, sorted_sets, sorted_set_names):
         ax = self.ax_setsize
@@ -272,7 +274,10 @@ class UpSetPlot():
         ax.set_xlim(xlims)
         ax.set_ylim(ylims)
 
-        row_width = self.x_values[1] - self.x_values[0]
+        if len(self.x_values) > 1:
+            row_width = self.x_values[1] - self.x_values[0]
+        else:
+            row_width = self.x_values[0]
 
         self._strip_axes(ax)
 
@@ -299,7 +304,7 @@ class UpSetPlot():
             ax.vlines(self.x_values[col_num], min(in_y), max(in_y), lw=3.5, color=self._color_for_query(frozenset(
                 in_sets)))
 
-    def _scatter(self, ax_index, data_values, plot_kwargs):
+    def _scatter(self, ax_index, data_values, plot_kwargs, *, labels = None):
         ax = self.add_plots_axes[ax_index]
 
         for data_item in data_values:
@@ -307,6 +312,7 @@ class UpSetPlot():
                        color=self._color_for_query(frozenset(data_item['in_sets'])),
                        alpha=.3,
                        zorder=self._zorder_for_query(frozenset(data_item['in_sets'])),
+                       edgecolor=None,
                        **plot_kwargs)
 
         ax.ticklabel_format(style='sci', axis='y', scilimits=(0, 4))
@@ -320,12 +326,16 @@ class UpSetPlot():
         ax.spines['left'].set_bounds(ylim[0], ylim[1])
         ax.spines['bottom'].set_bounds(xlim[0], xlim[1])
 
+        if labels is not None:
+            ax.set_xlabel(labels['x'], labelpad=3, fontweight='bold', fontsize=13)
+            ax.set_ylabel(labels['y'], labelpad=3, fontweight='bold', fontsize=13)
+
         return ax
 
 
 class DataExtractor:
     def __init__(self, data_dict, columns):
-        self.columns = columns
+        self.columns = columns if len(columns) > 1 else columns[0]
         self.ordered_dfs, self.ordered_df_names, self.df_dict = self.extract_base_sets_data(data_dict,
                                                                                             columns)
         self.in_sets_list, self.inters_degrees, \
@@ -368,9 +378,11 @@ class DataExtractor:
             seed = in_sets_l.pop()
             exclusive_intersection = pd.Index(self.df_dict[seed][self.columns])
             for s in in_sets_l:
-                exclusive_intersection = exclusive_intersection.intersection(pd.Index(self.df_dict[s][self.columns]))
+                exclusive_intersection = exclusive_intersection.intersection(pd.Index(self.df_dict[s][
+                                                                                          self.columns]))
             for s in out_sets:
-                exclusive_intersection = exclusive_intersection.difference(pd.Index(self.df_dict[s][self.columns]))
+                exclusive_intersection = exclusive_intersection.difference(pd.Index(self.df_dict[s][
+                                                                                        self.columns]))
             final_df = self.df_dict[seed].set_index(pd.Index(self.df_dict[seed][self.columns])).ix[
                 exclusive_intersection].reset_index(drop=True)
             inters_dict[in_sets] = final_df
@@ -427,5 +439,7 @@ if __name__ == '__main__':
     f = open('./test_data_dict', 'rb')
     data_dict = load(f)
     f.close()
-    plot(data_dict, ['title', 'rating_avg', 'rating_std'],
-         additional_plots=[{'kind': 'scatter', 'data': {'x': 'rating_avg', 'y': 'rating_std'}}])
+    plot(data_dict, unique_keys=['title'], sort_by='degree', inters_size_bounds=(20, np.inf),
+         query=[('action',), ('romance', 'action'), ('romance',)],
+                 additional_plots=[{'kind':'scatter', 'data':{'x':'rating_avg', 'y':'rating_std'}},
+                          {'kind':'scatter', 'data':{'x':'rating_avg', 'y':'rating_std'}}])

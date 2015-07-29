@@ -1,42 +1,82 @@
 # pyUpset
 A pure-python implementation of the UpSet suite of visualisation methods by Lex, Gehlenborg et al.
 
+
+## Purpose
 The purpose of this package is to reproduce (statically) some of the visualisations that can be obtained through the UpSet tool of Lex, Gehlenborg et al. (See http://vcg.github.io/upset/about/#)
 
-At the moment the package contains a single module with the essential functionality to produce plots of intersections that reproduce those of UpSet. We plan to include further plotting facilities and support for intersection query.
+In particular, __pyUpSet's focus is on intersections__, which motivates many of the design choices behind the exposed 
+interface and the internal mechanics of the module.
 
 ## How it works
 
-The current interface is very simple. It is possible to immediately obtain a graph going through the wrapper function `plot`, as in 
+The current interface is very simple, and that's how the module is intended to be used. Plots are produced by calling
+ the function `plot`, as in 
 ```
 import pyUpset as pyu
-pyu.plot(sets, set_names)
+pyu.plot(data_dict)
 ```
 to produce
-![alt text](https://github.com/ImSoErgodic/py-upset/blob/master/demo_plain.png "")
+![alt text](https://github.com/ImSoErgodic/py-upset/blob/master/basic.png "")
 
 Displayed intersections can also be filtered or sorted by size or degree:
 ```
-import numpy as np
-pyu.plot(sets, set_names, sort_by='degree', inters_size_bounds=(20, np.inf))
+pyu = reload(pyu)
+pyu.plot(data_dict, unique_keys = ['title'], sort_by='degree', inters_size_bounds=(20, 400))
 ```
 produces
-![alt text](https://github.com/ImSoErgodic/py-upset/blob/master/demo_filtered.png "")
+![alt text](https://github.com/ImSoErgodic/py-upset/blob/master/basic_filtered.png "")
 
-Alternatively, one can go through the class instantiation process
+### Additional plots
+
+It is possible to add further plots that use information contained in the data frames, as in 
 ```
-us = pyu.UpSet(sets, set_names)
-us.plot(sort_by='degree', inters_degree_bounds=(2, 4))
+pyu = reload(pyu)
+pyu.plot(data_dict, unique_keys = ['title'], 
+         additional_plots=[{'kind':'scatter', 'data':{'x':'rating_avg', 'y':'rating_std'}},
+                           {'kind':'scatter', 'data':{'x':'rating_avg', 'y':'rating_std'}}]) # identical subgraphs 
+                           only for demonstration purposes
 ```
-This is especially useful if one wants a finer control over the plotting process or wants to experiment with sorting. 
-## Notes
-Please bear in mind the following when using pyUpset:
-* pyUpset is under active development so current behaviour may change at any time
-* Some of the salient features of UpSet like support for additional graphs and intersection query/highlighting are not present yet. They will be introduced shortly and be built on top of pandas
-* __A note on performance__: In some cases computing the intersections of numerous, large sets can be a costly operation. Since the limits of the axes in the figure are computed using the number of intersections that are within the boundaries specified by `inters_size_bounds` and `inters_degree_bounds`, if the two corresponding tuples don't change then generating new plots even for many large sets will be faster than the first run. If new boundaries are specified, then new intersections have to be computed.
-* __A very specific use case__: py-UpSet has a very specific use case: It is focussed on the study of intersections 
-of sets. Hence the queries can _only_ be used to highlight points belonging to particular intersection, one query per
- intersection. Likewise, in order for highlighting to make sense on additional graphs, it is necessary that the 
- values being plotted for each data point are unchanged across the various data frames (otherwise it wouldn't make 
- sense to highlight the markers of a scatterplot on variables x and y corresponding to data points in data frames A 
- and B when said data points have different x/y values in A and B)
+This produces
+![alt text](https://github.com/ImSoErgodic/py-upset/blob/master/basic_w_subplots.png "")
+
+__Additional graph kinds currently supported__: `scatter`
+
+### Intersection highlighting
+
+pyUpSet supports the highlighting of  "queries", which are essentially a representation of an intersection as a tuple
+. For example, the following call produces graphs where all data belonging to the intersection of the "romance" and 
+"adventure" sets is highlighted.
+```
+pyu = reload(pyu)
+pyu.plot(data_dict, unique_keys = ['title'],
+         additional_plots=[{'kind':'scatter', 'data':{'x':'rating_avg', 'y':'rating_std'}},
+                           {'kind':'scatter', 'data':{'x':'rating_avg', 'y':'rating_std'}}],
+         query = [('adventure', 'action')]
+        )
+```
+![alt text](https://github.com/ImSoErgodic/py-upset/blob/master/basic_w_subplots_query.png "")
+
+## A note on the input format
+pyUpSet has a very specific use case: It is focussed on the study of intersections 
+of sets. In order for a definition of intersection to make sense, and even more for the integration of additional 
+graphs to be meaningful, it is assumed that the input data frames have properties of _homonymy_ (they contain 
+columns with the same names) and _homogeneity_ (columns with the same name, intuitively, contain data of the same 
+kind). While hononymy is a purely interface-dependent requirement whose aim is primarily to make pyUpSet's interface 
+leaner, homogeneity has a functional role in allowing definitions of uniqueness and commonality for the data points 
+in the input data frames. 
+
+Whenever possible, pyUpSet will try to check for and enforce the two above properties. 
+In particular, when the `unique_keys` argument of `plot`, which is intended to specify one or more columns that can 
+uniquely identify rows in the data frames, is omitted pyUpSet will try to use all columns 
+with common names across the data frames as a list of unique keys. Under the hypotheses of homogeneity and homonymy 
+this should be enough for all the operations carried out by pyUpSet to complete successfully.
+
+
+## Upcoming changes
+Please bear in mind that pyUpset is under active development so current behaviour may change at any time. In 
+particular, here is a list of changes, in no particular order, to be expected soon:
+* improved OO interface for increased flexibility and customisation
+* universal support for all graphs callable as methods on `matplotlib` Axes
+* replacement of the temporary annotation for base set names with a table, akin to that in the original UpSet
+* automated scaling of figure and axes grid according to the number of sets, intersections and additional plots
