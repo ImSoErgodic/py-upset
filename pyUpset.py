@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from itertools import chain, combinations
+from functools import partial
 
 
 def plot(data_dict, *, unique_keys=None, sort_by='size', inters_size_bounds=(0, np.inf),
@@ -48,6 +49,7 @@ def plot(data_dict, *, unique_keys=None, sort_by='size', inters_size_bounds=(0, 
     intersections to highligh must be specified with the names used as keys in the data_dict.
 
     """
+    query = [] if query is None else query
     ap = [] if additional_plots is None else additional_plots
     all_columns = unique_keys if unique_keys is not None else __get_all_common_columns(data_dict)
     all_columns = list(all_columns)
@@ -63,12 +65,14 @@ def plot(data_dict, *, unique_keys=None, sort_by='size', inters_size_bounds=(0, 
                                ordered_inters_sizes)
     fig_dict['additional'] = []
 
-    for i, pl in enumerate(ap):
-        plot_kind = pl['kind']
-        data_values = plot_data.extract_data_for[plot_kind](**pl['data'])
-        graph_kwargs = pl['graph_kwargs'] if pl.__contains__('graph_kwargs') else {}
-        pm = upset._plot_method[plot_kind]
-        ax = pm(i, data_values, graph_kwargs, labels=pl['data'])
+
+    # ap = [{kind:'', data:{x:'', y:''}, s:'', ..., kwargs:''}]
+    for i, graph_settings in enumerate(ap):
+        plot_kind = graph_settings.pop('kind')
+        data_vars = graph_settings.pop('data_quantities')
+        graph_properties = graph_settings.get('graph_properties', {})
+        data_values = plot_data.extract_data_for(data_vars, query)
+        ax = upset.additional_plot(i, plot_kind, data_values, graph_properties, labels=data_vars)
         fig_dict['additional'].append(ax)
 
     return fig_dict
@@ -109,13 +113,8 @@ class UpSetPlot():
         # set standard colors
         self.greys = plt.cm.Greys([.22, .8])
 
-        # map of additional plot names to internal methods
-        self._plot_method = {
-            'scatter': self._scatter
-        }
-
         # map queries to graphic properties
-        self.query = [] if query is None else query
+        self.query = query
         qu_col = plt.cm.rainbow(np.linspace(.01, .99, len(self.query)))
         self.query2color = dict(zip([frozenset(q) for q in self.query], qu_col))
         self.query2zorder = dict(zip([frozenset(q) for q in self.query], np.arange(len(self.query)) + 1))
@@ -125,7 +124,20 @@ class UpSetPlot():
         self.cols = cols
         self.x_values, self.y_values = self._create_coordinates(rows, cols)
         self.fig, self.ax_intbars, self.ax_intmatrix, \
-        self.ax_setsize, self.add_plots_axes = self._prepare_figure(additional_plots)
+        self.ax_setsize, self.additional_plots_axes = self._prepare_figure(additional_plots)
+
+        self.standard_graph_settings = {
+            'scatter': {
+                'alpha': .3,
+                'edgecolor': None
+            },
+            'hist': {
+                'histtype': 'stepfilled',
+                'normed': 1,
+                'alpha': .3,
+                'lw': 0
+            }
+        }
 
         # single dictionary may be fragile - I leave it here as a future option
         # self.query2kwargs = dict(zip([frozenset(q) for q in self.query],
@@ -324,7 +336,7 @@ class UpSetPlot():
 
         bar_colors = [self._color_for_query(frozenset(inter)) for inter in ordered_in_sets]
 
-        ax.bar(bar_bottom_left, inters_sizes, width=width, color=bar_colors)
+        ax.bar(bar_bottom_left, inters_sizes, width=width, color=bar_colors, linewidth=0)
 
         ylim = ax.get_ylim()
         label_vertical_gap = (ylim[1] - ylim[0]) / 60
@@ -340,6 +352,7 @@ class UpSetPlot():
         ax.spines['left'].set_bounds(ylim[0], ylim[1])
 
         ax.yaxis.grid(True, lw=.25, color='grey', ls=':')
+        ax.set_axisbelow(True)
         ax.set_ylabel("Intersection size", labelpad=6, fontweight='bold', fontsize=13)
 
         return ax.get_xlim()
@@ -395,7 +408,7 @@ class UpSetPlot():
             ax.vlines(self.x_values[col_num], min(in_y), max(in_y), lw=3.5, color=self._color_for_query(frozenset(
                 in_sets)))
 
-    def _scatter(self, ax_index, data_values, plot_kwargs, *, labels=None):
+    def additional_plot(self, ax_index, kind, data_values, graph_args, *, labels=None):
         """
         Scatter plot (for additional plots).
 
@@ -410,15 +423,21 @@ class UpSetPlot():
 
         :return: Axes
         """
-        ax = self.add_plots_axes[ax_index]
+        ax = self.additional_plots_axes[ax_index]
 
-        for data_item in data_values:
-            ax.scatter(x=data_item['x'], y=data_item['y'],
-                       color=self._color_for_query(frozenset(data_item['in_sets'])),
-                       alpha=.3,
-                       zorder=self._zorder_for_query(frozenset(data_item['in_sets'])),
-                       edgecolor=None,
-                       **plot_kwargs)
+        plot_method = getattr(ax, kind)
+
+        for k, v in self.standard_graph_settings.get(kind, {}).items():
+            graph_args.setdefault(k, v)
+
+        plot_method = partial(plot_method, **graph_args)
+
+        # data_values = [{query:{relevant data}}]
+        for query, data_item in data_values.items():
+            plot_method(color=self._color_for_query(frozenset(query)),
+                        zorder=self._zorder_for_query(frozenset(query)),
+                        **data_item
+                        )
 
         ax.ticklabel_format(style='sci', axis='y', scilimits=(0, 4))
 
@@ -431,10 +450,9 @@ class UpSetPlot():
         ax.spines['left'].set_bounds(ylim[0], ylim[1])
         ax.spines['bottom'].set_bounds(xlim[0], xlim[1])
 
-        if labels is not None:
-            ax.set_xlabel(labels['x'], labelpad=3, fontweight='bold', fontsize=13)
-            ax.set_ylabel(labels['y'], labelpad=3, fontweight='bold', fontsize=13)
-
+        for l, text in labels.items():
+            getattr(ax, 'set_%slabel' % l)(text, labelpad=3,
+                                           fontweight='bold', fontsize=13) if l in ['x', 'y'] else None
         return ax
 
 
@@ -452,9 +470,6 @@ class DataExtractor:
                                                                                             unique_keys)
         self.in_sets_list, self.inters_degrees, \
         self.out_sets_list, self.inters_df_dict = self.extract_intersection_data()
-        self.extract_data_for = {
-            'scatter': self.__extract_data_for_scatter
-        }
 
 
     def extract_base_sets_data(self, data_dict, unique_keys):
@@ -496,6 +511,8 @@ class DataExtractor:
         inters_degrees = []
         for col_num, in_sets in enumerate(chain.from_iterable(
                 combinations(self.ordered_df_names, i) for i in np.arange(1, len(self.ordered_dfs) + 1))):
+
+            in_sets = frozenset(in_sets)
 
             inters_degrees.append(len(in_sets))
             in_sets_list.append(in_sets)
@@ -551,18 +568,22 @@ class DataExtractor:
 
         return self.filtered_inters_sizes, self.filtered_in_sets, self.filtered_out_sets
 
-    def __extract_data_for_scatter(self, *, x=None, y=None):
+    def extract_data_for(self, var_dict, queries):
         """
-        Extract data for scatter plot.
+        Extract data from named columns (values) and place in named variables (keys).
 
-        :param x: str. Name of column containing data for x coordinates.
-        :param y: str. Name of column containing data for y coordinates.
-        :return: list of dict. [{'x':data_for_x, 'y':data_for_y, 'in_sets':tuple_of_included_sets]
+        :return: list of dict. [{query:{x:, y:, ...}}]
         """
-        data_values = [dict(zip(['x', 'y', 'in_sets'],
-                                [self.inters_df_dict[a][x].values,
-                                 self.inters_df_dict[a][y].values,
-                                 a])) for a in self.filtered_in_sets]
+        data_values = {}
+        for q in queries:
+            data_values[q] = dict(zip(var_dict.keys(),
+                [self.inters_df_dict[frozenset(q)][v].values for k, v in var_dict.items()]))
+        data_values['others'] = dict(zip(var_dict.keys(),
+            [chain(*[self.inters_df_dict[frozenset(q)][v].values for q in self.filtered_in_sets if q not in queries])
+             for k, v in var_dict.items()]))
+        for k, vals in data_values['others'].items():
+            data_values['others'][k] = [x for x in vals]
+
         return data_values
 
 
@@ -581,6 +602,4 @@ if __name__ == '__main__':
 # TODO: if possible, remove horrible hack that uses Index instead of pd.merge
 # TODO: adjust figure size depending on number of graphs
 # TODO: adjust bracket size in base-set plots
-# TODO: support for: histograms, bar charts, time series - CAN THIS BE MADE COMPLETELY CUSTOM?
-# TODO: Finish documentation
-# TODO: remove black edge around bars
+# TODO: add comments?

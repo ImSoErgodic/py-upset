@@ -1,4 +1,4 @@
-# pyUpset
+# pyUpSet
 A pure-python implementation of the UpSet suite of visualisation methods by Lex, Gehlenborg et al.
 
 
@@ -20,6 +20,9 @@ pyu.plot(data_dict)
 ```
 to produce
 ![alt text](https://github.com/ImSoErgodic/py-upset/blob/master/basic.png "")
+
+__N.B.:__ Notice that intersections are _exclusive_, meaning that they form a [partition](https://en.wikipedia.org/wiki/Partition_of_a_set) of the union of the base 
+sets.
 
 Displayed intersections can also be filtered or sorted by size or degree:
 ```
