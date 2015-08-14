@@ -1,5 +1,3 @@
-pandas == 0.16.2
 matplotlib == 1.4.3
+pandas == 0.16.2
 numpy == 1.9.2
-
-# See http://pandas.pydata.org/pandas-docs/stable/install.html#dependencies for optional dependencies for pandas

@@ -1,10 +1,23 @@
 __author__ = 'leo@opensignal.com'
-from distutils.core import setup
+from setuptools import setup, find_packages
+# To use a consistent encoding
+from codecs import open
+from os import path
+
+here = path.abspath(path.dirname(__file__))
+
 
 setup(name='PyUpSet',
-      version='0.1.0',
+      version='0.1.1',
       description='Python implementation of the UpSet visualisation suite by Lex et al.',
       author = 'Leonardo Baldassini',
       author_email= 'leo@opensignal.com',
-      url='',
-      packages = ['pandas', 'matplotlib', 'numpy'])
+      url='https://github.com/ImSoErgodic/py-upset',
+      license='MIT',
+      classifiers= [
+      'Development Status :: 4 - Beta',
+      'Intended Audience :: Developers, Data Scientists',
+      'Topic :: Data Analysis :: Visualisation Tools',
+      'Programming Language :: Python 3'],
+      install_requires=['pandas', 'matplotlib', 'numpy'],
+      package_data={'test_data_dictionary':['test_data_dict.pckl']})

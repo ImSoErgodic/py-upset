@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from itertools import chain, combinations
 from functools import partial
+from matplotlib.patches import Rectangle, Circle
+
 
 
 def plot(data_dict, *, unique_keys=None, sort_by='size', inters_size_bounds=(0, np.inf),
@@ -124,7 +126,7 @@ class UpSetPlot():
         self.cols = cols
         self.x_values, self.y_values = self._create_coordinates(rows, cols)
         self.fig, self.ax_intbars, self.ax_intmatrix, \
-        self.ax_setsize, self.additional_plots_axes = self._prepare_figure(additional_plots)
+        self.ax_setsize, self.ax_tablenames, self.additional_plots_axes = self._prepare_figure(additional_plots)
 
         self.standard_graph_settings = {
             'scatter': {
@@ -133,7 +135,6 @@ class UpSetPlot():
             },
             'hist': {
                 'histtype': 'stepfilled',
-                'normed': 1,
                 'alpha': .3,
                 'lw': 0
             }
@@ -163,23 +164,25 @@ class UpSetPlot():
         :param additional_plots: list of dictionaries as specified in plot()
         :return: references to the newly created figure and axes
         """
-        fig = plt.figure(figsize=(16, 10))
+        fig = plt.figure(figsize=(17, 10.5))
         if additional_plots:
-            main_gs = gridspec.GridSpec(3, 1, hspace=.6)
+            main_gs = gridspec.GridSpec(3, 1, hspace=.4)
             topgs = main_gs[:2, 0]
             botgs = main_gs[2, 0]
         else:
             topgs = gridspec.GridSpec(1, 1)[0, 0]
-        fig_cols = self.cols + 3
+        fig_cols = self.cols + 5
         fig_rows = self.rows + self.rows * 4
 
         gs_top = gridspec.GridSpecFromSubplotSpec(fig_rows, fig_cols, subplot_spec=topgs, wspace=.1, hspace=.2)
         setsize_w, setsize_h = 3, self.rows
-        intmatrix_w, intmatrix_h = setsize_w + self.cols, self.rows
-        intbars_w, intbars_h = setsize_w + self.cols, self.rows * 4
+        tablesize_w, tablesize_h = setsize_w + 2, self.rows
+        intmatrix_w, intmatrix_h = tablesize_w + self.cols, self.rows
+        intbars_w, intbars_h = tablesize_w + self.cols, self.rows * 4
         ax_setsize = plt.subplot(gs_top[-1:-setsize_h, 0:setsize_w])
-        ax_intmatrix = plt.subplot(gs_top[-1:-intmatrix_h, setsize_w:intmatrix_w])
-        ax_intbars = plt.subplot(gs_top[:self.rows * 4 - 1, setsize_w:intbars_w])
+        ax_tablenames = plt.subplot(gs_top[-1:-tablesize_h, setsize_w:tablesize_w])
+        ax_intmatrix = plt.subplot(gs_top[-1:-intmatrix_h, tablesize_w:intmatrix_w])
+        ax_intbars = plt.subplot(gs_top[:self.rows * 4 - 1, tablesize_w:intbars_w])
 
         add_ax = []
         if additional_plots:
@@ -193,7 +196,7 @@ class UpSetPlot():
                 new_plotL = plt.subplot(gs_bottom[r, c])
                 add_ax.append(new_plotL)
 
-        return fig, ax_intbars, ax_intmatrix, ax_setsize, tuple(add_ax)
+        return fig, ax_intbars, ax_intmatrix, ax_setsize, ax_tablenames, tuple(add_ax)
 
     def _color_for_query(self, query):
         """
@@ -236,13 +239,46 @@ class UpSetPlot():
         :return: dictionary containing figure and axes references.
         """
         ylim = self._base_sets_plot(ordered_dfs, ordered_df_names)
+        self._table_names_plot(ordered_df_names, ylim)
         xlim = self._inters_sizes_plot(ordered_in_sets, ordered_inters_sizes)
         set_row_map = dict(zip(ordered_df_names, self.y_values))
         self._inters_matrix(ordered_in_sets, ordered_out_sets, xlim, ylim, set_row_map)
         return {'figure': self.fig,
                 'intersection_bars': self.ax_intbars,
                 'intersection_matrix': self.ax_intmatrix,
-                'base_set_size': self.ax_setsize}
+                'base_set_size': self.ax_setsize,
+                'names':self.ax_tablenames}
+
+    def _table_names_plot(self, sorted_set_names, ylim):
+        ax = self.ax_tablenames
+        ax.set_ylim(ylim)
+        xlim = ax.get_xlim()
+        tr = ax.transData.transform
+        for i, name in enumerate(sorted_set_names):
+            ax.text(x = 1,#(xlim[1]-xlim[0]/2),
+                    y = self.y_values[i],
+                    s = name,
+                    fontsize = 14,
+                    clip_on=True,
+                    va='center',
+                    ha='right',
+                    transform=ax.transData,
+                    family='monospace')
+
+        # if len(self.x_values) > 1:
+        #     row_width = self.x_values[1] - self.x_values[0]
+        # else:
+        #     row_width = self.x_values[0]
+        #
+        # background = plt.cm.Greys([.09])[0]
+        #
+        # for r, y in enumerate(self.y_values):
+        #     if r % 2 == 0:
+        #         ax.add_patch(Rectangle((xlim[0], y - row_width / 2), height=row_width,
+        #                                width=xlim[1],
+        #                                color=background, zorder=0))
+        ax.axis('off')
+
 
     def _base_sets_plot(self, sorted_sets, sorted_set_names):
         """
@@ -270,17 +306,18 @@ class UpSetPlot():
         xlim = ax.get_xlim()
         ax.spines['bottom'].set_bounds(xlim[0], xlim[1])
 
-        for i, (x, y) in enumerate(zip([len(x) for x in sorted_sets], self.y_values)):
-            ax.annotate(sorted_set_names[i], rotation=90, ha='right', va='bottom', fontsize=15,
-                        xy=(x, y), xycoords='data',
-                        xytext=(-30, 0), textcoords='offset points',
-                        arrowprops=dict(arrowstyle="-[",
-                                        shrinkA=1,
-                                        shrinkB=3,
-                                        connectionstyle='arc,angleA=-180, angleB=180, armB=30'  # widthB to control
-                                        # bracket
-                                        ),
-                        )
+        # bracket_height = ax.transData.inverted().transform([(0, 0), (0, ax.get_ylim()[1])])
+        # bracket_height = np.abs(bracket_height[1, 1] - bracket_height[0, 1])
+        # for i, (x, y) in enumerate(zip([len(x) for x in sorted_sets], self.y_values)):
+        #     ax.annotate(sorted_set_names[i], rotation=90, ha='right', va='bottom', fontsize=15,
+        #                 xy=(x, y), xycoords='data',
+        #                 xytext=(-30, 0), textcoords='offset points',
+        #                 arrowprops=dict(arrowstyle="-[, widthB=%s"%(bracket_height,),
+        #                                 shrinkA=1,
+        #                                 shrinkB=3,
+        #                                 connectionstyle='arc,angleA=-180, angleB=180, armB=30',
+        #                                 ),
+        #                 )
 
         ax.set_xlabel("Set size", fontweight='bold', fontsize=13)
 
@@ -342,7 +379,8 @@ class UpSetPlot():
         label_vertical_gap = (ylim[1] - ylim[0]) / 60
 
         for x, y in zip(self.x_values, inters_sizes):
-            ax.text(x, y + label_vertical_gap, "%.2g" % y, rotation=90, ha='center', va='bottom')
+            ax.text(x, y + label_vertical_gap, "%.2g" % y,
+                    rotation=90, ha='center', va='bottom')
 
         ax.ticklabel_format(style='sci', axis='y', scilimits=(0, 4))
 
@@ -386,8 +424,6 @@ class UpSetPlot():
         self._strip_axes(ax)
 
         background = plt.cm.Greys([.09])[0]
-
-        from matplotlib.patches import Rectangle, Circle
 
         for r, y in enumerate(self.y_values):
             if r % 2 == 0:
@@ -433,16 +469,21 @@ class UpSetPlot():
         plot_method = partial(plot_method, **graph_args)
 
         # data_values = [{query:{relevant data}}]
+        ylim, xlim = [np.inf, -np.inf], [np.inf, -np.inf]
         for query, data_item in data_values.items():
             plot_method(color=self._color_for_query(frozenset(query)),
                         zorder=self._zorder_for_query(frozenset(query)),
                         **data_item
                         )
+            new_xlim, new_ylim = ax.get_xlim(), ax.get_ylim()
+            for old, new in zip([xlim, ylim], [new_xlim, new_ylim]):
+                old[0] = new[0] if old[0] > new[0] else old[0]
+                old[1] = new[1] if old[1] < new[1] else old[1]
 
         ax.ticklabel_format(style='sci', axis='y', scilimits=(0, 4))
 
         self._strip_axes(ax, keep_spines=['bottom', 'left'], keep_ticklabels=['bottom', 'left'])
-        ylim, xlim = ax.get_ylim(), ax.get_xlim()
+        # ylim, xlim = ax.get_ylim(), ax.get_xlim()
         gap_y, gap_x = max(ylim) / 500.0 * 20, max(xlim) / 500.0 * 20
         ax.set_ylim(ylim[0] - gap_y, ylim[1] + gap_y)
         ax.set_xlim(xlim[0] - gap_x, xlim[1] + gap_x)
@@ -590,16 +631,20 @@ class DataExtractor:
 if __name__ == '__main__':
     from pickle import load
 
-    f = open('./test_data_dict', 'rb')
+    f = open('./test_data_dict.pckl', 'rb')
     data_dict = load(f)
     f.close()
-    plot(data_dict, unique_keys=['title'], sort_by='degree', inters_size_bounds=(20, np.inf),
-         query=[('action',), ('romance', 'action'), ('romance',)],
-         additional_plots=[{'kind': 'scatter', 'data': {'x': 'rating_avg', 'y': 'rating_std'}},
-                           {'kind': 'scatter', 'data': {'x': 'rating_avg', 'y': 'rating_std'}}])
+    plot(data_dict, unique_keys=['title'],
+          query=[('action',), ('romance', 'action'), ('romance',)],
+          additional_plots=[{'kind': 'scatter',
+                             'data_quantities': {'x': 'rating_avg', 'y': 'views'},
+                            'graph_properties':{'alpha':.3, 'edgecolor':'w', 'lw':.3}},
+                            {'kind': 'hist',
+                             'data_quantities': {'x': 'views'},
+                            'graph_properties':{'bins':10, 'normed':1, 'alpha':.6}}]
+         )
 
 
 # TODO: if possible, remove horrible hack that uses Index instead of pd.merge
 # TODO: adjust figure size depending on number of graphs
-# TODO: adjust bracket size in base-set plots
 # TODO: add comments?
