@@ -23,7 +23,7 @@ interface and the internal mechanics of the module. (More on this below.)
 Consistently with the documentation used for Lex et al.'s UpSet, the data employed in the following examples comes 
 from the movie data set of the [GroupLens Labs](http://grouplens.org/datasets/movielens).
 
-## <a id='install></a>How to install
+## <a id='install'></a>How to install
 
 pyUpSet is on [PyPI](https://pypi.python.org/pypi/pyupset/0.1.1.post1) and can therefore be installed via `pip`:
 
