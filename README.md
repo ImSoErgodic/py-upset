@@ -60,7 +60,7 @@ Displayed intersections can also be filtered or sorted by size or degree:
 pyu.plot(data_dict, unique_keys = ['title'], sort_by='degree', inters_size_bounds=(20, 400))
 ```
 produces
-![basic filtering](https://github.com/ImSoErgodic/py-upset/blob/master/basic_filtered.png "")
+![basic filtering](https://github.com/ImSoErgodic/py-upset/blob/master/pictures/basic_filtered.png "")
 
 The example above also uses the `unique_keys` kwarg, which specifies columns of the underlying data frames in 
 `data_dict` that can be used to uniquely identify rows and possibly speed up the computation of intersections.
