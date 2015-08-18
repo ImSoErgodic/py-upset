@@ -81,8 +81,7 @@ The highlighting produced by the queries is passed to the additional graphs. The
          query = [('adventure', 'action'), ('romance', 'war')])
  ```
  yields
- ![additional plots with query and properties](https://github
- .com/ImSoErgodic/py-upset/blob/master/pictures/add_plots_query_props.png "")
+ ![additional plots with query and properties](https://github.com/ImSoErgodic/py-upset/blob/master/pictures/add_plots_query_props.png "")
 
 ## A note on the input format
 pyUpSet has a very specific use case: It is focussed on the study of intersections 
