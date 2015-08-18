@@ -16,8 +16,8 @@ setup(name='PyUpSet',
       license='MIT',
       classifiers= [
       'Development Status :: 4 - Beta',
-      'Intended Audience :: Developers, Data Scientists',
-      'Topic :: Data Analysis :: Visualisation Tools',
-      'Programming Language :: Python 3'],
+      'Intended Audience :: Science/Research',
+      'Topic :: Scientific/Engineering :: Visualization',
+      'Programming Language :: Python :: 3'],
       install_requires=['pandas', 'matplotlib', 'numpy'],
       package_data={'test_data_dictionary':['test_data_dict.pckl']})
