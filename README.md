@@ -1,8 +1,18 @@
 # pyUpSet
 A pure-python implementation of the UpSet suite of visualisation methods by Lex, Gehlenborg et al.
 
+### Contents
+[Purpose](#purpose)
 
-## Purpose
+[How to install](#install)
+
+[How it works](#howitworks)
+
+[A note on the input format](#inputformat)
+
+[Upcoming changes](#upcomingchanges)
+
+## <a id='purpose'></a>Purpose
 The purpose of this package is to statically reproduce some of the visualisations that can be obtained through the 
 [UpSet tool of Lex, Gehlenborg et al.](http://vcg.github.io/upset/about/#)
 
@@ -13,7 +23,17 @@ interface and the internal mechanics of the module. (More on this below.)
 Consistently with the documentation used for Lex et al.'s UpSet, the data employed in the following examples comes 
 from the movie data set of the [GroupLens Labs](http://grouplens.org/datasets/movielens).
 
-## How it works
+## <a id='install></a>How to install
+
+pyUpSet is on [PyPI](https://pypi.python.org/pypi/pyupset/0.1.1.post1) and can therefore be installed via `pip`:
+
+```
+pip install pyupset
+```
+
+If you'd rather install from source, you can download and unzip the tar archive (in `pyupset/dist/`) 
+
+## <a id='howitworks'></a>How it works
 
 The current interface is very simple: Plots can be generated solely from the exposed function `plot`, whose arguments
  allow flexible customisations of the graphs. The easiest example is the plain, straightforward basic intersection 
@@ -83,7 +103,7 @@ The highlighting produced by the queries is passed to the additional graphs. The
  yields
  ![additional plots with query and properties](https://github.com/ImSoErgodic/py-upset/blob/master/pictures/add_plots_query_props.png "")
 
-## A note on the input format
+## <a id='inputformat'></a>A note on the input format
 pyUpSet has a very specific use case: It is focussed on the study of intersections 
 of sets. In order for a definition of intersection to make sense, and even more for the integration of additional 
 graphs to be meaningful, it is assumed that the input data frames have properties of _homonymy_ (they contain 
@@ -98,7 +118,7 @@ with common names across the data frames as a list of unique keys. Under the hyp
 this should be enough for all the operations carried out by pyUpSet to complete successfully.
 
 
-## Upcoming changes
+## <a id='upcomingchanges'></a>Upcoming changes
 Please bear in mind that pyUpset is under active development so current behaviour may change at any time. In 
 particular, here is a list of changes, in no particular order, to be expected soon:
 * improved OO interface for increased flexibility and customisation
