@@ -31,7 +31,11 @@ pyUpSet is on [PyPI](https://pypi.python.org/pypi/pyupset/0.1.1.post1) and can t
 pip install pyupset
 ```
 
-If you'd rather install from source, you can download and unzip the tar archive (in `pyupset/dist/`) 
+If you'd rather install from source, you can download and unzip the tar archive (in [pyupset/dist/](https://github.com/ImSoErgodic/py-upset/tree/master/pyupset/dist)) and run
+
+```
+python setup.py install
+```
 
 ## <a id='howitworks'></a>How it works
 
