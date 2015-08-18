@@ -8,14 +8,14 @@ here = path.abspath(path.dirname(__file__))
 
 
 setup(name='PyUpSet',
-      version='0.1.1',
+      version='0.1.1.post1',
       description='Python implementation of the UpSet visualisation suite by Lex et al.',
       author = 'Leonardo Baldassini',
       author_email= 'leo@opensignal.com',
       url='https://github.com/ImSoErgodic/py-upset',
       license='MIT',
       classifiers= [
-      'Development Status :: 4 - Beta',
+      'Development Status :: 5 - Stable',
       'Intended Audience :: Science/Research',
       'Topic :: Scientific/Engineering :: Visualization',
       'Programming Language :: Python :: 3'],
