@@ -1,0 +1,14 @@
+Metadata-Version: 1.1
+Name: PyUpSet
+Version: 0.1.1.post1
+Summary: Python implementation of the UpSet visualisation suite by Lex et al.
+Home-page: https://github.com/ImSoErgodic/py-upset
+Author: Leonardo Baldassini
+Author-email: leo@opensignal.com
+License: MIT
+Description: UNKNOWN
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Science/Research
+Classifier: Topic :: Scientific/Engineering :: Visualization
+Classifier: Programming Language :: Python :: 3

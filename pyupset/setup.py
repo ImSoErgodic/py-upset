@@ -15,7 +15,7 @@ setup(name='PyUpSet',
       url='https://github.com/ImSoErgodic/py-upset',
       license='MIT',
       classifiers= [
-      'Development Status :: 5 - Stable',
+      'Development Status :: 5 - Production/Stable',
       'Intended Audience :: Science/Research',
       'Topic :: Scientific/Engineering :: Visualization',
       'Programming Language :: Python :: 3'],
