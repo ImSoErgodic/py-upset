@@ -23,7 +23,7 @@ interface and the internal mechanics of the module. (More on this below.)
 Consistently with the documentation used for Lex et al.'s UpSet, the data employed in the following examples comes 
 from the movie data set of the [GroupLens Labs](http://grouplens.org/datasets/movielens).
 
-## <a id='install></a>How to install
+## <a id='install'></a>How to install
 
 pyUpSet is on [PyPI](https://pypi.python.org/pypi/pyupset/0.1.1.post1) and can therefore be installed via `pip`:
 
@@ -31,7 +31,11 @@ pyUpSet is on [PyPI](https://pypi.python.org/pypi/pyupset/0.1.1.post1) and can t
 pip install pyupset
 ```
 
-If you'd rather install from source, you can download and unzip the tar archive (in `pyupset/dist/`) 
+If you'd rather install from source, you can download and unzip the tar archive (in [pyupset/dist/](https://github.com/ImSoErgodic/py-upset/tree/master/pyupset/dist)) and run
+
+```
+python setup.py install
+```
 
 ## <a id='howitworks'></a>How it works
 
@@ -56,7 +60,7 @@ Displayed intersections can also be filtered or sorted by size or degree:
 pyu.plot(data_dict, unique_keys = ['title'], sort_by='degree', inters_size_bounds=(20, 400))
 ```
 produces
-![basic filtering](https://github.com/ImSoErgodic/py-upset/blob/master/basic_filtered.png "")
+![basic filtering](https://github.com/ImSoErgodic/py-upset/blob/master/pictures/basic_filtered.png "")
 
 The example above also uses the `unique_keys` kwarg, which specifies columns of the underlying data frames in 
 `data_dict` that can be used to uniquely identify rows and possibly speed up the computation of intersections.
