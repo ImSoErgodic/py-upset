@@ -1,5 +1,5 @@
 __author__ = 'leo@opensignal.com'
-from setuptools import setup, find_packages
+from distutils.core import setup
 # To use a consistent encoding
 from codecs import open
 from os import path
@@ -8,7 +8,7 @@ here = path.abspath(path.dirname(__file__))
 
 
 setup(name='PyUpSet',
-      version='0.1.1.post1',
+      version='0.1.1.post5',
       description='Python implementation of the UpSet visualisation suite by Lex et al.',
       author = 'Leonardo Baldassini',
       author_email= 'leo@opensignal.com',
@@ -20,4 +20,6 @@ setup(name='PyUpSet',
       'Topic :: Scientific/Engineering :: Visualization',
       'Programming Language :: Python :: 3'],
       install_requires=['pandas', 'matplotlib', 'numpy'],
-      package_data={'test_data_dictionary':['test_data_dict.pckl']})
+      packages=['pyupset'],
+      package_dir={'pyupset':'src/pyupset'},
+      package_data={'pyupset':['src/data/test_data_dict.pckl']})
