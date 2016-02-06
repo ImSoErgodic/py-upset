@@ -1,5 +1,5 @@
 --index-url https://pypi.python.org/pypi/pyupset
 
-matplotlib == 1.4.3
-pandas == 0.16.2
-numpy == 1.9.2
+matplotlib >= 1.4.3
+pandas >= 0.16.2
+numpy >= 1.9.2
