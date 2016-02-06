@@ -9,7 +9,6 @@ from functools import partial
 from matplotlib.patches import Rectangle, Circle
 
 
-
 def plot(data_dict, *, unique_keys=None, sort_by='size', inters_size_bounds=(0, np.inf),
          inters_degree_bounds=(1, np.inf), additional_plots=None, query=None):
     """
@@ -57,9 +56,8 @@ def plot(data_dict, *, unique_keys=None, sort_by='size', inters_size_bounds=(0, 
     all_columns = list(all_columns)
 
     plot_data = DataExtractor(data_dict, all_columns)
-    ordered_inters_sizes, ordered_in_sets, ordered_out_sets = plot_data.get_filtered_intersections(sort_by,
-                                                                                                   inters_size_bounds,
-                                                                                                   inters_degree_bounds)
+    ordered_inters_sizes, ordered_in_sets, ordered_out_sets = \
+        plot_data.get_filtered_intersections(sort_by,inters_size_bounds,inters_degree_bounds)
     ordered_dfs, ordered_df_names = plot_data.ordered_dfs, plot_data.ordered_df_names
 
     upset = UpSetPlot(len(ordered_dfs), len(ordered_in_sets), additional_plots, query)
@@ -205,7 +203,7 @@ class UpSetPlot():
         :param query: frozenset.
         :return: color as length 4 array.
         """
-        query_color = self.query2color.setdefault(query, self.greys[1])
+        query_color = self.query2color.get(query, self.greys[1])
         return query_color
 
     def _zorder_for_query(self, query):
@@ -215,7 +213,7 @@ class UpSetPlot():
         :param query: frozenset.
         :return: zorder as int.
         """
-        query_zorder = self.query2zorder.setdefault(query, 0)
+        query_zorder = self.query2zorder.get(query, 0)
         return query_zorder
 
     def main_plot(self, ordered_dfs, ordered_df_names, ordered_in_sets, ordered_out_sets, ordered_inters_sizes):
@@ -247,7 +245,7 @@ class UpSetPlot():
                 'intersection_bars': self.ax_intbars,
                 'intersection_matrix': self.ax_intmatrix,
                 'base_set_size': self.ax_setsize,
-                'names':self.ax_tablenames}
+                'names': self.ax_tablenames}
 
     def _table_names_plot(self, sorted_set_names, ylim):
         ax = self.ax_tablenames
@@ -255,10 +253,10 @@ class UpSetPlot():
         xlim = ax.get_xlim()
         tr = ax.transData.transform
         for i, name in enumerate(sorted_set_names):
-            ax.text(x = 1,#(xlim[1]-xlim[0]/2),
-                    y = self.y_values[i],
-                    s = name,
-                    fontsize = 14,
+            ax.text(x=1,  # (xlim[1]-xlim[0]/2),
+                    y=self.y_values[i],
+                    s=name,
+                    fontsize=14,
                     clip_on=True,
                     va='center',
                     ha='right',
@@ -266,7 +264,7 @@ class UpSetPlot():
                     family='monospace')
 
         # if len(self.x_values) > 1:
-        #     row_width = self.x_values[1] - self.x_values[0]
+        # row_width = self.x_values[1] - self.x_values[0]
         # else:
         #     row_width = self.x_values[0]
         #
@@ -309,7 +307,7 @@ class UpSetPlot():
         # bracket_height = ax.transData.inverted().transform([(0, 0), (0, ax.get_ylim()[1])])
         # bracket_height = np.abs(bracket_height[1, 1] - bracket_height[0, 1])
         # for i, (x, y) in enumerate(zip([len(x) for x in sorted_sets], self.y_values)):
-        #     ax.annotate(sorted_set_names[i], rotation=90, ha='right', va='bottom', fontsize=15,
+        # ax.annotate(sorted_set_names[i], rotation=90, ha='right', va='bottom', fontsize=15,
         #                 xy=(x, y), xycoords='data',
         #                 xytext=(-30, 0), textcoords='offset points',
         #                 arrowprops=dict(arrowstyle="-[, widthB=%s"%(bracket_height,),
@@ -438,11 +436,10 @@ class UpSetPlot():
             # out_circles = [Circle((self.x_values[col_num], y), radius=dot_size, color=self.greys[0]) for y in out_y]
             # for c in chain.from_iterable([in_circles, out_circles]):
             # ax.add_patch(c)
-            ax.scatter(np.repeat(self.x_values[col_num], len(in_y)), in_y, color=self._color_for_query(frozenset(
-                in_sets)), s=300)
+            ax.scatter(np.repeat(self.x_values[col_num], len(in_y)), in_y,
+                       color=np.tile(self._color_for_query(frozenset(in_sets)), (len(in_y), 1)),s=300)
             ax.scatter(np.repeat(self.x_values[col_num], len(out_y)), out_y, color=self.greys[0], s=300)
-            ax.vlines(self.x_values[col_num], min(in_y), max(in_y), lw=3.5, color=self._color_for_query(frozenset(
-                in_sets)))
+            ax.vlines(self.x_values[col_num], min(in_y), max(in_y), lw=3.5, color=self._color_for_query(frozenset(in_sets)))
 
     def additional_plot(self, ax_index, kind, data_values, graph_args, *, labels=None):
         """
@@ -471,6 +468,7 @@ class UpSetPlot():
         # data_values = [{query:{relevant data}}]
         ylim, xlim = [np.inf, -np.inf], [np.inf, -np.inf]
         for query, data_item in data_values.items():
+            clr = self._color_for_query(frozenset(query))
             plot_method(color=self._color_for_query(frozenset(query)),
                         zorder=self._zorder_for_query(frozenset(query)),
                         **data_item
@@ -616,11 +614,12 @@ class DataExtractor:
         :return: list of dict. [{query:{x:, y:, ...}}]
         """
         data_values = {}
-        for q in queries:
+        poss_queries = [q for q in queries if frozenset(q) in self.filtered_in_sets]
+        for q in poss_queries:
             data_values[q] = dict(zip(var_dict.keys(),
                 [self.inters_df_dict[frozenset(q)][v].values for k, v in var_dict.items()]))
         data_values['others'] = dict(zip(var_dict.keys(),
-            [chain(*[self.inters_df_dict[frozenset(q)][v].values for q in self.filtered_in_sets if q not in queries])
+            [chain(*[self.inters_df_dict[frozenset(q)][v].values for q in self.filtered_in_sets if q not in poss_queries])
              for k, v in var_dict.items()]))
         for k, vals in data_values['others'].items():
             data_values['others'][k] = [x for x in vals]
@@ -631,19 +630,24 @@ class DataExtractor:
 if __name__ == '__main__':
     from pickle import load
 
-    f = open('./test_data_dict.pckl', 'rb')
+    f = open('../data/test_data_dict.pckl', 'rb')
     data_dict = load(f)
     f.close()
-    plot(data_dict, unique_keys=['title'],
-          query=[('action',), ('romance', 'action'), ('romance',)],
-          additional_plots=[{'kind': 'scatter',
-                             'data_quantities': {'x': 'rating_avg', 'y': 'views'},
-                            'graph_properties':{'alpha':.3, 'edgecolor':'w', 'lw':.3}},
-                            {'kind': 'hist',
-                             'data_quantities': {'x': 'views'},
-                            'graph_properties':{'bins':10, 'normed':1, 'alpha':.6}}]
+    # df1 = pd.DataFrame(index=list('abcd'), columns=('rating_std', 'rating_avg', 'views'), data=np.random.rand(4, 3)).reset_index()
+    # df2 = pd.DataFrame(index=list('abxyz'), columns=('rating_std', 'rating_avg', 'views'), data=np.random.rand(5, 3)).reset_index()
+    # df3 = pd.DataFrame(index=list('ghxde'), columns=('rating_std', 'rating_avg', 'views'), data=np.random.rand(5, 3)).reset_index()
+    # data_dict = {'df1':df1, 'df2':df2, 'df3':df3}
+    d = plot(data_dict, unique_keys=['title'],
+             inters_size_bounds=(2, 20),
+         query=[('action',), ('romance', 'action', 'war', 'adventure'), ('romance', 'adventure')],
+         additional_plots=[{'kind': 'scatter',
+                            'data_quantities': {'x': 'rating_std', 'y': 'rating_avg'},
+                            'graph_properties': {'alpha': 1, 'edgecolor': 'w', 'lw': .3}},
+                           {'kind': 'hist',
+                           'data_quantities': {'x': 'views'},
+                           'graph_properties': {'bins': 10, 'alpha': .6}}
+                           ]
          )
-
 
 # TODO: if possible, remove horrible hack that uses Index instead of pd.merge
 # TODO: adjust figure size depending on number of graphs
