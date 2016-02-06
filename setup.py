@@ -8,7 +8,7 @@ here = path.abspath(path.dirname(__file__))
 
 
 setup(name='PyUpSet',
-      version='0.1.1.post5',
+      version='0.1.1.post7',
       description='Python implementation of the UpSet visualisation suite by Lex et al.',
       author = 'Leonardo Baldassini',
       author_email= 'leo@opensignal.com',

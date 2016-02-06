@@ -191,6 +191,7 @@ class UpSetPlot():
             from itertools import product
 
             for r, c in product(range(num_bot_rows), range(num_bot_cols)):
+                if r+c+1>num_plots: break
                 new_plotL = plt.subplot(gs_bottom[r, c])
                 add_ax.append(new_plotL)
 
