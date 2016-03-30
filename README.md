@@ -43,7 +43,7 @@ The current interface is very simple: Plots can be generated solely from the exp
  allow flexible customisations of the graphs. The easiest example is the plain, straightforward basic intersection 
  plot:  
 ```
-import pyUpset as pyu
+import pyupset as pyu
 from pickle import load
 with open('./test_data_dict.pckl', 'r') as f:
    data_dict = load(f)
